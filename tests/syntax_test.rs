@@ -113,4 +113,8 @@ fn parse_2() {
     let FunctionCall { function, args } = stmts[0].as_ref() else {
         panic!();
     };
+
+    let Block {stmts} = else_blk.as_ref().unwrap().as_ref() else {
+        panic!();
+    };
 }

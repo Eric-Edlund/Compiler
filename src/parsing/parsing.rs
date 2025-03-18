@@ -1,5 +1,3 @@
-use super::lexing::Token;
-use super::lexing::TokenType;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -21,7 +19,7 @@ pub enum BinOperation {
     NEq,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum AstNode<'a> {
     FunctionDecl {
         identifier: &'a str,
@@ -52,24 +50,184 @@ pub enum AstNode<'a> {
         identifier: String,
     },
     CommaList {
-        elements: Vec<BasedAstNode<'a>>
+        elements: Vec<BasedAstNode<'a>>,
     },
     EmptyParens,
-    Return {value: Option<BasedAstNode<'a>>},
+    Return {
+        value: Option<BasedAstNode<'a>>,
+    },
     IfStmt {
         condition: BasedAstNode<'a>,
         then_blk: BasedAstNode<'a>,
         else_blk: Option<BasedAstNode<'a>>,
     },
+    WhileStmt {
+        begin_blk: BasedAstNode<'a>,
+        condition: BasedAstNode<'a>,
+        body_blk: BasedAstNode<'a>,
+    },
+}
+
+impl std::fmt::Debug for AstNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_pretty(0, f)
+    }
+}
+
+impl AstNode<'_> {
+    fn fmt_pretty(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FunctionDecl { identifier, body } => {
+                f.write_str(&format!("FunctionDecl {}\n", identifier))?;
+                body.as_ref().fmt_pretty(indent + 1, f)
+            }
+            Self::LiteralNumber(arg0) => f.write_str(&format!("{}", arg0)),
+            Self::BinOp { op, lhs, rhs } => {
+                f.write_str("(")?;
+                lhs.as_ref().fmt_pretty(indent, f)?;
+                f.write_str(&format!(" {:?} ", op))?;
+                rhs.as_ref().fmt_pretty(indent, f)?;
+                f.write_str(")")
+            }
+            Self::Block { stmts } => {
+                f.write_str("{\n")?;
+                for stmt in stmts {
+                    f.write_str(&"  ".repeat(indent))?;
+                    stmt.as_ref().fmt_pretty(indent + 1, f)?;
+                    f.write_str("\n")?;
+                }
+                
+                f.write_str(&"  ".repeat(indent))?;
+                f.write_str("}")?;
+                Ok(())
+            }
+            Self::Declaration { identifier, rhs } => {
+                f.write_str(&format!("let {} = {:?}", identifier, rhs))
+            }
+            Self::Assignment { lhs, rhs } => f.write_str(&format!("{:?} = {:?}", lhs, rhs)),
+            Self::FunctionCall { function, args } => {
+                f.write_str(&format!("{:?}({:?})", function, args))
+            }
+            Self::Variable { identifier } => f.write_str(&format!("{}", identifier)),
+            Self::CommaList { elements } => f.write_str(&format!("{:?}", elements)),
+            Self::IfStmt {
+                condition,
+                then_blk,
+                else_blk,
+            } => {
+                f.write_str("if ")?;
+                condition.as_ref().fmt_pretty(indent, f)?;
+                f.write_str(" ")?;
+                then_blk.as_ref().fmt_pretty(indent, f)?;
+                if let Some(else_blk) = else_blk {
+                    f.write_str(" else ")?;
+                    else_blk.as_ref().fmt_pretty(indent, f)?;
+                }
+                Ok(())
+            }
+            Self::EmptyParens => write!(f, "EmptyParens"),
+            Self::Return { value } => f.debug_struct("Return").field("value", value).finish(),
+            Self::WhileStmt {
+                begin_blk,
+                condition,
+                body_blk,
+            } => f
+                .debug_struct("WhileStmt")
+                .field("begin_blk", begin_blk)
+                .field("condition", condition)
+                .field("body_blk", body_blk)
+                .finish(),
+        }
+    }
+    pub fn child_nodes(&self) -> Vec<BasedAstNode> {
+        match self {
+            FunctionDecl { identifier, body } => {
+                let mut res = vec![body.clone()];
+                res.append(&mut body.child_nodes());
+                res
+            },
+            LiteralNumber(_) => vec![],
+            BinOp { op, lhs, rhs } => {
+                let mut res = lhs.child_nodes();
+                res.append(&mut rhs.child_nodes());
+                res
+            },
+            Block { stmts } => {
+                let mut res = vec![];
+                for stmt in stmts {
+                    res.push(stmt.clone());
+                    res.append(&mut stmt.child_nodes());
+                }
+                res
+            },
+            Declaration { identifier, rhs } => rhs.child_nodes(),
+            Assignment { lhs, rhs } => {
+                let mut res = vec![lhs.clone(), rhs.clone()];
+                res.append(&mut lhs.child_nodes());
+                res.append(&mut rhs.child_nodes());
+                res
+            },
+            FunctionCall { function, args } => {
+                let mut res = vec![function.clone(), args.clone()];
+                res.append(&mut function.child_nodes());
+                res.append(&mut args.child_nodes());
+                res
+            },
+            Variable { identifier } => vec![],
+            CommaList { elements } => {
+                let mut res = elements.clone();
+                for el in elements {
+                    res.append(&mut el.child_nodes());
+                }
+                res
+            },
+            EmptyParens => vec![],
+            Return { value } => {
+                if let Some(value) = value {
+                    let mut res = vec![value.clone()];
+                    res.append(&mut value.child_nodes());
+                    res
+                } else {
+                    vec![]
+                }
+            },
+            IfStmt { condition, then_blk, else_blk } => {
+                let mut res = vec![condition.clone(), then_blk.clone()];
+                res.append(&mut condition.child_nodes());
+                res.append(&mut then_blk.child_nodes());
+                if let Some(else_blk) = else_blk {
+                    res.push(else_blk.clone());
+                    res.append(&mut else_blk.child_nodes());
+                }
+                res
+            },
+            WhileStmt { begin_blk, condition, body_blk } => {
+                let mut res = vec![begin_blk.clone(), condition.clone(), body_blk.clone()];
+                res.append(&mut condition.child_nodes());
+                res.append(&mut begin_blk.child_nodes());
+                res.append(&mut body_blk.child_nodes());
+                res
+            },
+        }
+    }
 }
 
 use AstNode::*;
 
+use super::lexing::Token;
+use super::lexing::TokenType;
+
 /// Also keeps a reference to the source token.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BasedAstNode<'a> {
     inner: Box<AstNode<'a>>,
     token: Option<&'a Token>,
+}
+
+impl std::fmt::Debug for BasedAstNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(format!("{:?}", &self.inner).as_str())
+    }
 }
 
 impl<'a> From<AstNode<'a>> for BasedAstNode<'a> {
@@ -95,7 +253,7 @@ impl<'a> Deref for BasedAstNode<'a> {
     }
 }
 
-impl<'a> DerefMut for BasedAstNode<'a> {
+impl DerefMut for BasedAstNode<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
@@ -126,7 +284,7 @@ impl ParseError {
             was_expecting: None,
         }
     }
-    fn other (context: impl Into<String>) -> Self {
+    fn other(context: impl Into<String>) -> Self {
         Self {
             unexpected_token: None,
             context: Some(context.into()),
@@ -149,11 +307,13 @@ where
 
     let mut result = Vec::<BasedAstNode<'a>>::new();
 
+    let mut ctx = Context::new();
+
     while i < tokens.len() {
         let token = &tokens[i];
         i += 1;
         match token.ty {
-            TokenType::Fn => match consume_function(tokens, &mut i) {
+            TokenType::Fn => match consume_function(&mut ctx, tokens, &mut i) {
                 Err(e) => {
                     err_cb(e);
                     return result;
@@ -172,7 +332,38 @@ where
     result
 }
 
-fn consume_function<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
+#[derive(Debug)]
+struct Context {
+    stack: Vec<String>,
+    print_changes: bool,
+}
+
+impl Context {
+    fn new() -> Self {
+        Self {
+            stack: vec![],
+            print_changes: false,
+        }
+
+    }
+    fn push(&mut self, a: impl Into<String>) {
+        let s = a.into();
+        if self.print_changes {
+            println!("Pushed {}", s);
+        }
+        self.stack.push(s)
+    }
+
+    fn pop(&mut self) {
+        let prev = self.stack.pop().unwrap();
+        if self.print_changes {
+            println!("Popped {}, top now {:?}", prev, self.stack.first())
+
+        }
+    }
+}
+
+fn consume_function<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
     let iter = RefCell::new(tokens[*start - 1..].iter());
     *start -= 1;
     let start = RefCell::new(start);
@@ -200,7 +391,7 @@ fn consume_function<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Based
     expect(TokenType::LBrace)?;
 
     **start.borrow_mut() -= 1;
-    let blk = consume_block(tokens, *start.borrow_mut())?;
+    let blk = consume_block(ctx, tokens, *start.borrow_mut())?;
 
     return Ok(BasedAstNode::<'a> {
         inner: Box::new(FunctionDecl {
@@ -212,9 +403,7 @@ fn consume_function<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Based
 }
 
 /// start should be the first token to consume, probably {
-fn consume_block<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
-    dbg!("Block started with {:?}", &tokens[*start..*start + 5]);
-
+fn consume_block<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
     let start = RefCell::new(start);
 
     let take = || {
@@ -240,32 +429,42 @@ fn consume_block<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<BasedAst
     while let Ok(tok) = take() {
         match tok.ty {
             TokenType::If => {
-                let expr = consume_expression(tokens, *start.borrow_mut())?;
-                let then_blk = consume_block(tokens, *start.borrow_mut())?;
+                ctx.push("If condition");
+                let expr = consume_expression(ctx, tokens, *start.borrow_mut())?;
+                ctx.pop();
+                ctx.push("Then blk");
+                let then_blk = consume_block(ctx, tokens, *start.borrow_mut())?;
+                ctx.pop();
                 let mut else_blk = None;
                 if expect(TokenType::Else).is_ok() {
-                    else_blk = Some(consume_block(tokens, *start.borrow_mut())?);
+                    ctx.push("Else blk");
+                    else_blk = Some(consume_block(ctx, tokens, *start.borrow_mut())?);
+                    ctx.pop();
                 }
 
-                stmts.push(IfStmt {
-                    condition: expr,
-                    then_blk,
-                    else_blk,
-                }.into())
+                stmts.push(
+                    IfStmt {
+                        condition: expr,
+                        then_blk,
+                        else_blk,
+                    }
+                    .into(),
+                )
             }
             TokenType::LBrace => {
                 **start.borrow_mut() -= 1;
-                stmts.push(consume_block(tokens, *start.borrow_mut())?);
+                ctx.push("Block");
+                stmts.push(consume_block(ctx, tokens, *start.borrow_mut())?);
+                ctx.pop();
             }
             TokenType::Let => {
                 **start.borrow_mut() -= 1;
-                let decl_node = consume_declaration(tokens, *start.borrow_mut())?;
+                let decl_node = consume_declaration(ctx, tokens, *start.borrow_mut())?;
                 stmts.push(decl_node);
             }
             TokenType::Identifier => {
                 **start.borrow_mut() -= 1;
-                let expr_node = consume_expression(tokens, *start.borrow_mut())?;
-                dbg!("Block consumed expression", &expr_node);
+                let expr_node = consume_expression(ctx, tokens, *start.borrow_mut())?;
                 stmts.push(expr_node);
             }
             TokenType::LineComment => {}
@@ -274,15 +473,15 @@ fn consume_block<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<BasedAst
                 let val = match take() {
                     Err(_) => None,
                     Ok(token) => match token.ty {
-                        TokenType::Semi | TokenType:: RBrace => None,
+                        TokenType::Semi | TokenType::RBrace => None,
                         _ => {
                             **start.borrow_mut() -= 1;
-                            Some(consume_expression(tokens, *start.borrow_mut())?)
-                        },
-                    }
+                            Some(consume_expression(ctx, tokens, *start.borrow_mut())?)
+                        }
+                    },
                 };
                 stmts.push(BasedAstNode {
-                    inner: Box::new(Return {value: val}),
+                    inner: Box::new(Return { value: val }),
                     token: Some(tok),
                 })
             }
@@ -296,8 +495,7 @@ fn consume_block<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<BasedAst
     })
 }
 
-fn consume_declaration<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
-    dbg!("Starting declaration", &tokens[*start..*start+5]);
+fn consume_declaration<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
     let start = RefCell::new(start);
 
     let take = || {
@@ -320,7 +518,7 @@ fn consume_declaration<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Ba
     let ident_tok = expect(TokenType::Identifier)?;
     expect(TokenType::EqAssign)?;
     // **start.borrow_mut() += 3;
-    let rhs = consume_expression(tokens, *start.borrow_mut())?;
+    let rhs = consume_expression(ctx, tokens, *start.borrow_mut())?;
 
     Ok(BasedAstNode::<'a> {
         inner: Box::new(Declaration {
@@ -331,14 +529,11 @@ fn consume_declaration<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Ba
     })
 }
 
-/// Expressions are only ended by semicolons or ) or {
+/// Expressions are only ended by semicolons or ) or { or }
 /// This function accepts the position of the first token of the expression
 /// and returns the position of the first token not consumed. This does
 /// not include the semi or ), unless the expression started on a (.
-fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
-    if tokens.len() > *start + 5 {
-        dbg!("Starting expression", &tokens[*start..*start + 5]);
-    }
+fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
     let iter = tokens[*start..].iter().peekable();
 
     // TODO: Raise if given an operator before a value
@@ -371,7 +566,10 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
     ) -> BasedAstNode<'a> {
         match op {
             BinOperation::Call => BasedAstNode {
-                inner: Box::new(FunctionCall { function: lhs, args: rhs }),
+                inner: Box::new(FunctionCall {
+                    function: lhs,
+                    args: rhs,
+                }),
                 token: None,
             },
             BinOperation::Assign => BasedAstNode {
@@ -410,11 +608,12 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
                 }),
                 token: None,
             },
-            BinOperation::Eq | BinOperation::NEq | BinOperation::Lt | BinOperation::Gt | BinOperation::LEq | BinOperation::GEq => BinOp {
-                op: *op,
-                lhs,
-                rhs,
-            }.into()
+            BinOperation::Eq
+            | BinOperation::NEq
+            | BinOperation::Lt
+            | BinOperation::Gt
+            | BinOperation::LEq
+            | BinOperation::GEq => BinOp { op: *op, lhs, rhs }.into(),
         }
     }
 
@@ -427,9 +626,7 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
         let tok = &tokens[*start];
         *start += 1;
         let op: Option<BinOperation> = match tok.ty {
-            TokenType::Semi => {
-                break
-            },
+            TokenType::Semi => break,
             TokenType::LParen => {
                 let parenthized_expr = if tokens[*start].ty == TokenType::RParen {
                     Some(BasedAstNode {
@@ -437,7 +634,7 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
                         token: Some(&tokens[*start]),
                     })
                 } else {
-                    let r = consume_expression(tokens, start)?;
+                    let r = consume_expression(ctx, tokens, start)?;
                     Some(r)
                 };
 
@@ -455,8 +652,8 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
                 } else {
                     None
                 }
-            },
-            TokenType::LBrace => {
+            }
+            TokenType::LBrace | TokenType::RBrace => {
                 *start -= 1;
                 break;
             }
@@ -469,7 +666,9 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
             TokenType::OpAdd => Some(BinOperation::Add),
             TokenType::Identifier => {
                 exprs.push(BasedAstNode {
-                    inner: Box::new(Variable {identifier: tok.src.clone()}),
+                    inner: Box::new(Variable {
+                        identifier: tok.src.clone(),
+                    }),
                     token: Some(tok),
                 });
                 None
@@ -490,7 +689,6 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
             _ => None,
         };
         last_token_was_op = op.is_some();
-        dbg!("Consumed", op, &exprs, &ops);
         if let Some(ref op) = op {
             // Apply ops of higher presidence
             let presidence = get_presidence(op);
@@ -506,7 +704,6 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
     }
 
     // Apply remaining ops in order
-    dbg!("Remaining ops", &exprs, &ops);
     while ops.last().is_some() {
         let a = exprs.pop().unwrap();
         let b = exprs.pop().unwrap();
@@ -514,11 +711,13 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
         let e = apply_op(&op, b, a);
         exprs.push(e);
     }
-    dbg!("Applied remaining ops", &exprs, &ops);
 
     match exprs.pop() {
         Some(e) => Ok(e),
-        None => Err(ParseError::other(format!("Incomplete expression {:?}", &tokens[*start..])))
+        None => Err(ParseError::other(format!(
+            "Incomplete expression {:?}",
+            &tokens[*start..]
+        ))),
     }
 }
 
@@ -526,7 +725,7 @@ fn consume_expression<'a>(tokens: &'a [Token], start: &mut usize) -> PResult<Bas
 mod tests {
     use crate::parsing::{
         lexing,
-        parsing::{AstNode, BinOperation},
+        parsing::{consume_block, AstNode, BinOperation, Context},
     };
 
     use super::consume_expression;
@@ -534,10 +733,15 @@ mod tests {
     #[test]
     fn shunting_yard_1() {
         let toks = lexing::lex(&"1 + 2 * 4 + 8 * 7;");
-        let ast = consume_expression(&toks, &mut 0).unwrap();
+        let ast = consume_expression(&mut Context::new(), &toks, &mut 0).unwrap();
         dbg!(&ast);
 
-        let AstNode::BinOp { op: BinOperation::Add, lhs, rhs} = ast.as_ref() else {
+        let AstNode::BinOp {
+            op: BinOperation::Add,
+            lhs,
+            rhs,
+        } = ast.as_ref()
+        else {
             panic!();
         };
 
@@ -545,11 +749,21 @@ mod tests {
             panic!();
         };
 
-        let AstNode::BinOp { op: BinOperation::Add, lhs, rhs } = rhs.as_ref() else {
+        let AstNode::BinOp {
+            op: BinOperation::Add,
+            lhs,
+            rhs,
+        } = rhs.as_ref()
+        else {
             panic!();
         };
 
-        let AstNode::BinOp { op: BinOperation::Mult, lhs: lhs1, rhs:rhs1} = lhs.as_ref() else {
+        let AstNode::BinOp {
+            op: BinOperation::Mult,
+            lhs: lhs1,
+            rhs: rhs1,
+        } = lhs.as_ref()
+        else {
             panic!();
         };
 
@@ -561,7 +775,12 @@ mod tests {
             panic!();
         };
 
-        let AstNode::BinOp { op: BinOperation::Mult, lhs: lhs2, rhs: rhs2} = rhs.as_ref() else {
+        let AstNode::BinOp {
+            op: BinOperation::Mult,
+            lhs: lhs2,
+            rhs: rhs2,
+        } = rhs.as_ref()
+        else {
             panic!();
         };
 
@@ -577,7 +796,42 @@ mod tests {
     #[test]
     fn shunting_yard_2() {
         let toks = lexing::lex(&"a = (1 + 2)() + square() * 4;");
-        let ast = consume_expression(&toks, &mut 0).unwrap();
+        let ast = consume_expression(&mut Context::new(), &toks, &mut 0).unwrap();
+        dbg!(&ast);
+    }
+
+    #[test]
+    fn if_blocks() {
+        use AstNode::*;
+
+        let toks = lexing::lex(&"{if 1 {print(a)} else {print(b)}}");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let ast = consume_block(&mut ctx, &toks, &mut 0).unwrap();
+        let Block { stmts } = ast.as_ref() else {
+            panic!();
+        };
+        let IfStmt {
+            condition,
+            then_blk,
+            else_blk,
+        } = &*stmts[0].inner
+        else {
+            panic!();
+        };
+        let Block { stmts } = then_blk.as_ref() else {
+            panic!();
+        };
+        let FunctionCall { function, args } = stmts[0].as_ref() else {
+            panic!();
+        };
+        let Block { stmts } = else_blk.as_ref().unwrap().as_ref() else {
+            panic!();
+        };
+        let FunctionCall { function, args } = stmts[0].as_ref() else {
+            panic!();
+        };
+
         dbg!(&ast);
     }
 }
