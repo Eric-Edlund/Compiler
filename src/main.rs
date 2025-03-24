@@ -56,8 +56,9 @@ async fn main() {
     explicate_control(&mut parsed_file);
 
     let mut x86_program = select_instructions(&parsed_file);
+    if_debug(format!("Select Instructions:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     allocate_registers(&mut x86_program);
-    if_debug(format!("Allocate Registers:\n\n{:?}\n", String::from_utf8(render(&x86_program)).unwrap()));
+    // if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     prelude_and_conclusion(&mut x86_program);
 
     if_debug(format!("X86Program:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
