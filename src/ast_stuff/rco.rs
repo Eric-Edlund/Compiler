@@ -117,9 +117,25 @@ fn rco_expr<'a>(
 ) -> BasedAstNode<'a> {
     match unit.as_ref() {
         Variable { .. } | LiteralNumber(_) => unit.clone(),
+        Not(expr) => {
+            let expr = rco_expr(expr, new_stmts);
+            let tmp: BasedAstNode = Variable {
+                identifier: temp_var_sym(),
+            }
+            .into();
+            new_stmts.push(
+                Assignment {
+                    lhs: tmp.clone(),
+                    rhs: expr,
+                }
+                .into(),
+            );
+            tmp
+        }
         BinOp { lhs, rhs, op } => {
             use BinOperation::*;
             match op {
+                Bang => panic!("Why is bang iun a binary operation?"),
                 Eq | LEq | GEq | Gt | Lt | NEq | Add | Sub | Mult | Div | Call => {
                     let lhs = rco_expr(lhs, new_stmts);
                     let rhs = rco_expr(rhs, new_stmts);
@@ -130,14 +146,7 @@ fn rco_expr<'a>(
                     new_stmts.push(
                         Assignment {
                             lhs: tmp.clone(),
-                            rhs: BasedAstNode::from(
-                                BinOp {
-                                    lhs,
-                                    rhs,
-                                    op: *op,
-                                }
-                                .clone(),
-                            ),
+                            rhs: BasedAstNode::from(BinOp { lhs, rhs, op: *op }.clone()),
                         }
                         .into(),
                     );
@@ -149,7 +158,8 @@ fn rco_expr<'a>(
                         Assignment {
                             lhs: lhs.clone(),
                             rhs,
-                        }.into()
+                        }
+                        .into(),
                     );
                     BasedAstNode::from(EmptyParens)
                 }

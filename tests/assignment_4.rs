@@ -2,8 +2,6 @@ use compiler::compile_program;
 use serde::Deserialize;
 use serde_json::from_str;
 
-
-
 const A1: &str = include_str!("./assignments/a4/test1.l");
 const A2: &str = include_str!("./assignments/a4/test2.l");
 const A3: &str = include_str!("./assignments/a4/test3.l");
@@ -35,7 +33,9 @@ fn test_assignment_4_tests() {
         let expected_result = read_expectations(test);
 
         let c_res = compile_program(test);
-        assert_eq!(expected_result.compiles, c_res.is_ok());
+        if expected_result.compiles && c_res.is_err() {
+            panic!("Program fails to compile but should succeed. Compile errors: {:?}", c_res.err().unwrap())
+        }
         if !expected_result.compiles {
             continue
         }

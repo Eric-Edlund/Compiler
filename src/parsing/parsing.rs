@@ -7,6 +7,7 @@ use std::ops::DerefMut;
 pub enum BinOperation {
     Assign,
     Call,
+    Bang,
     Mult,
     Div,
     Add,
@@ -26,6 +27,8 @@ pub enum AstNode<'a> {
         body: BasedAstNode<'a>,
     },
     LiteralNumber(i32),
+    LiteralBool(bool),
+    Not(BasedAstNode<'a>),
     BinOp {
         op: BinOperation,
         lhs: BasedAstNode<'a>,
@@ -77,6 +80,13 @@ impl std::fmt::Debug for AstNode<'_> {
 impl AstNode<'_> {
     fn fmt_pretty(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::LiteralBool(v) => {
+                f.write_str(&format!("{}", v))
+            }
+            Self::Not(expr) => {
+                f.write_str(&"!");
+                expr.as_ref().fmt_pretty(indent+1, f)
+            }
             Self::FunctionDecl { identifier, body } => {
                 f.write_str(&format!("FunctionDecl {}\n", identifier))?;
                 body.as_ref().fmt_pretty(indent + 1, f)
@@ -141,6 +151,10 @@ impl AstNode<'_> {
     }
     pub fn child_nodes(&self) -> Vec<BasedAstNode> {
         match self {
+            Not(expr) => {
+                vec![expr.clone()]
+            }
+            LiteralBool(_) => vec![],
             FunctionDecl { identifier, body } => {
                 let mut res = vec![body.clone()];
                 res.append(&mut body.child_nodes());
@@ -546,6 +560,7 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
     fn get_presidence(op: &BinOperation) -> u32 {
         match op {
             BinOperation::Call => 10,
+            BinOperation::Bang => 9,
             BinOperation::Mult => 8,
             BinOperation::Div => 8,
             BinOperation::Add => 5,
@@ -560,31 +575,37 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
         }
     }
 
+    fn apply_unary<'a>(
+        op: &BinOperation,
+        expr: BasedAstNode<'a>
+    ) -> BasedAstNode<'a> {
+        match op {
+            BinOperation::Bang => Not(expr).into(),
+            x => panic!("Bang is the only unary operator. Not {:?}", x)
+        }
+    }
+
     fn apply_op<'a>(
         op: &BinOperation,
         lhs: BasedAstNode<'a>,
         rhs: BasedAstNode<'a>,
     ) -> BasedAstNode<'a> {
         match op {
-            BinOperation::Call => BasedAstNode {
-                inner: Box::new(FunctionCall {
+            BinOperation::Bang => panic!("Bang is not a binary operation."),
+            BinOperation::Call => 
+                FunctionCall {
                     function: lhs,
                     args: rhs,
-                }),
-                token: None,
-            },
+                }.into(),
             BinOperation::Assign => BasedAstNode {
                 inner: Box::new(Assignment { lhs, rhs }),
                 token: None,
             },
-            BinOperation::Mult => BasedAstNode {
-                inner: Box::new(BinOp {
-                    op: BinOperation::Mult,
-                    lhs,
-                    rhs,
-                }),
-                token: None,
-            },
+            BinOperation::Mult => BinOp {
+                op: BinOperation::Mult,
+                lhs,
+                rhs,
+            }.into(),
             BinOperation::Div => BasedAstNode {
                 inner: Box::new(BinOp {
                     op: BinOperation::Div,
@@ -672,6 +693,14 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
             TokenType::EqAssign => Some(BinOperation::Assign),
             TokenType::OpMult => Some(BinOperation::Mult),
             TokenType::OpAdd => Some(BinOperation::Add),
+            TokenType::True => {
+                exprs.push(LiteralBool(true).into());
+                None
+            }
+            TokenType::False => {
+                exprs.push(LiteralBool(false).into());
+                None
+            }
             TokenType::Identifier => {
                 exprs.push(BasedAstNode {
                     inner: Box::new(Variable {
@@ -709,9 +738,14 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
                 if ctx.print_changes {
                     println!("Applying op {:?}", op);
                 }
+
                 let a = exprs.pop().unwrap();
-                let b = exprs.pop().unwrap();
-                let e = apply_op(&op, b, a);
+                let e = if op == BinOperation::Bang {
+                    apply_unary(&op, a)
+                } else {
+                    let b = exprs.pop().unwrap();
+                    apply_op(&op, b, a)
+                };
                 exprs.push(e);
             }
             ops.push(*op);
@@ -860,5 +894,20 @@ mod tests {
         let mut ctx = Context::new();
         ctx.print_changes = true;
         let ast = consume_expression(&mut ctx, &toks, &mut 0).unwrap();
+    }
+
+    #[test]
+    fn bool_literals_and_bang() {
+        use AstNode::*;
+        let toks = lexing::lex(&"!true == false");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let ast = consume_expression(&mut ctx, &toks, &mut 0).unwrap();
+
+        let BinOp { op, lhs, rhs } = ast.as_ref() else {
+            panic!();
+        };
+
+        assert_eq!(BinOperation::Eq, *op);
     }
 }

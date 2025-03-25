@@ -23,12 +23,12 @@ pub mod ast_stuff;
 pub mod codegen_stuff;
 
 
-type CompileResult = Result<Vec<u8>, ()>;
+type CompileResult = Result<Vec<u8>, Vec<String>>;
 
 pub fn compile_program(src: &str) -> CompileResult {
     let mut parsed_file = build_ast(src, |_| {});
     let type_res = type_check(&parsed_file);
-    if type_res.is_err() { return Err(()) }
+    type_res?;
 
     remove_complex_operands(&mut parsed_file);
     explicate_control(&mut parsed_file);

@@ -154,6 +154,10 @@ fn check_expr<'a>(
             return Ok(Type::Unit);
         }
         LiteralNumber(_) => return Ok(Type::Int),
+        LiteralBool(_) => return Ok(Type::Bool),
+        Not(expr) => {
+            return check_unaryop(&BinOperation::Bang, expr, scope);
+        }
         BinOp { op, lhs, rhs } => {
             return check_binop(op, lhs, rhs, scope);
         }
@@ -165,6 +169,25 @@ fn check_expr<'a>(
     }
 }
 
+fn check_unaryop<'a>(
+    op: &BinOperation,
+    expr: &BasedAstNode,
+    scope: &mut ScopeChain<Type<'a>>
+) -> TypeCheckResult<Type<'a>> {
+    use BinOperation::*;
+    match op {
+        Bang => {
+            let expr_t = check_expr(expr, scope)?;
+            if expr_t != Type::Bool {
+                return Err(format!("! can only be applied to booleans."))
+            }
+            return Ok(Type::Bool)
+        }
+        x => panic!("Why is {:?} in a not node?", expr)
+    }
+
+}
+
 fn check_binop<'a>(
     op: &BinOperation,
     lhs: &BasedAstNode,
@@ -173,6 +196,7 @@ fn check_binop<'a>(
 ) -> TypeCheckResult<Type<'a>> {
     use BinOperation::*;
     match op {
+        Bang => panic!("Why is bang in a binop node?"),
         Eq | Gt | GEq | NEq | Lt | LEq => {
             let lhs_t = check_expr(lhs, scope)?;
             let rhs_t = check_expr(rhs, scope)?;
