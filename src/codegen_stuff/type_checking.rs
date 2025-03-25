@@ -197,6 +197,16 @@ fn check_binop<'a>(
     use BinOperation::*;
     match op {
         Bang => panic!("Why is bang in a binop node?"),
+        And | Or => {
+            let lhs_t = check_expr(lhs, scope)?;
+            let rhs_t = check_expr(rhs, scope)?;
+
+            if lhs_t != Type::Bool || rhs_t != Type::Bool {
+                return Err(format!("'and' and 'or' keywords only work with bool arguments."));
+            }
+
+            return Ok(Type::Bool)
+        }
         Eq | Gt | GEq | NEq | Lt | LEq => {
             let lhs_t = check_expr(lhs, scope)?;
             let rhs_t = check_expr(rhs, scope)?;

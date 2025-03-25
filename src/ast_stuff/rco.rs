@@ -136,7 +136,7 @@ fn rco_expr<'a>(
             use BinOperation::*;
             match op {
                 Bang => panic!("Why is bang iun a binary operation?"),
-                Eq | LEq | GEq | Gt | Lt | NEq | Add | Sub | Mult | Div | Call => {
+                Eq | LEq | GEq | Gt | Lt | NEq | Add | Sub | Mult | Div | Call | And | Or => {
                     let lhs = rco_expr(lhs, new_stmts);
                     let rhs = rco_expr(rhs, new_stmts);
                     let tmp: BasedAstNode = Variable {
@@ -165,8 +165,8 @@ fn rco_expr<'a>(
                 }
             }
         }
-        _ => {
-            todo!()
+        x => {
+            todo!("{:?}", x)
         }
     }
 }

@@ -12,6 +12,8 @@ pub enum BinOperation {
     Div,
     Add,
     Sub,
+    And,
+    Or,
     Eq,
     Lt,
     Gt,
@@ -571,6 +573,8 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
             BinOperation::LEq => 4,
             BinOperation::GEq => 4,
             BinOperation::NEq => 4,
+            BinOperation::And => 3,
+            BinOperation::Or => 3,
             BinOperation::Assign => 2,
         }
     }
@@ -592,6 +596,16 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
     ) -> BasedAstNode<'a> {
         match op {
             BinOperation::Bang => panic!("Bang is not a binary operation."),
+            BinOperation::And => BinOp{
+                op: BinOperation::And,
+                lhs,
+                rhs,
+            }.into(),
+            BinOperation::Or => BinOp{
+                op: BinOperation::Or,
+                lhs,
+                rhs,
+            }.into(),
             BinOperation::Call => 
                 FunctionCall {
                     function: lhs,
@@ -717,6 +731,8 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
                 });
                 None
             }
+            TokenType::And => Some(BinOperation::And),
+            TokenType::Or => Some(BinOperation::Or),
             TokenType::EqCmp => Some(BinOperation::Eq),
             TokenType::NEqCmp => Some(BinOperation::NEq),
             TokenType::LCmp => Some(BinOperation::Lt),
@@ -909,5 +925,22 @@ mod tests {
         };
 
         assert_eq!(BinOperation::Eq, *op);
+    }
+
+    #[test]
+    fn and_or() {
+        use AstNode::*;
+        let toks = lexing::lex(&"true and false");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let ast = consume_expression(&mut ctx, &toks, &mut 0).unwrap();
+
+        let BinOp { op, lhs, rhs } = ast.as_ref() else {
+            panic!();
+        };
+        assert_eq!(*op, BinOperation::And);
+
+        assert_eq!(BinOperation::Eq, *op);
+
     }
 }

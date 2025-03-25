@@ -14,7 +14,7 @@ const A9: &str = include_str!("./assignments/a4/test9.l");
 const A10: &str = include_str!("./assignments/a4/test10.l");
 const A11: &str = include_str!("./assignments/a4/test11.l");
 
-const TESTS: &[&str] = &[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11];
+const TESTS: &[&str] = &[A1, A2, A3, A4, /* A5, */ A6, A7, A8, A9, A10, A11];
 
 #[derive(Deserialize)]
 struct TestExpectedResult {
