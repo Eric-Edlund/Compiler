@@ -29,6 +29,14 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
         Je{to} => format!("  je {}\n", render_expr(to)),
         Jmp(to) => format!("  jmp {}\n", render_expr(to)),
         Sete(rd) => format!("  sete {}\n", render_expr(rd)),
+        Setl(rd) => format!("  setl {}\n", render_expr(rd)),
+        Setle(rd) => format!("  setle {}\n", render_expr(rd)),
+        Setg(rd) => format!("  setg {}\n", render_expr(rd)),
+        Setge(rd) => format!("  setge {}\n", render_expr(rd)),
+        Setne(rd) => format!("  setne {}\n", render_expr(rd)),
+        Andq(a, rd) => format!("  andq {}, {}\n", render_expr(a), render_expr(rd)),
+        Orq(a, rd) => format!("  orq {}, {}\n", render_expr(a), render_expr(rd)),
+
     };
     res.extend(bytes.into_bytes());
 }

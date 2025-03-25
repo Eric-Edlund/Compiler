@@ -1,8 +1,8 @@
-use ordered_hash_map::ordered_map::OrderedHashMap;
 use crate::codegen_stuff::common::X86Arg;
 use crate::parsing::parsing::BasedAstNode;
 use crate::parsing::parsing::BinOperation;
 use crate::parsing::{parsing::AstNode, FileAnal};
+use ordered_hash_map::ordered_map::OrderedHashMap;
 use std::sync::Mutex;
 
 use super::common::{X86Instr, X86Program};
@@ -63,7 +63,10 @@ fn si_stmt(
             assert_eq!(identifier, &"main");
             // TODO: Labels for different functions
             si_stmt(body, current_block, blocks);
-            blocks.get_mut(current_block).unwrap().push(X86Instr::Jmp(X86Arg::Label("conclusion".to_string())));
+            blocks
+                .get_mut(current_block)
+                .unwrap()
+                .push(X86Instr::Jmp(X86Arg::Label("conclusion".to_string())));
         }
         FunctionCall { function, ref args } => {
             let Variable { identifier } = function.as_ref() else {
@@ -116,13 +119,19 @@ fn si_stmt(
             *current_block = then_label.clone();
             blocks.insert(current_block.clone(), Vec::new());
             si_stmt(then_blk, current_block, blocks);
-            blocks.get_mut(current_block).unwrap().push(X86Instr::Jmp(l_cont.clone()));
+            blocks
+                .get_mut(current_block)
+                .unwrap()
+                .push(X86Instr::Jmp(l_cont.clone()));
 
             if let Some(else_blk) = else_blk {
                 *current_block = else_label.clone();
                 blocks.insert(current_block.clone(), Vec::new());
                 si_stmt(else_blk, current_block, blocks);
-                blocks.get_mut(current_block).unwrap().push(X86Instr::Jmp(l_cont.clone()));
+                blocks
+                    .get_mut(current_block)
+                    .unwrap()
+                    .push(X86Instr::Jmp(l_cont.clone()));
             }
 
             *current_block = cont_label.clone();
@@ -142,8 +151,8 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
         Variable { identifier } => (vec![], X86Arg::Var(identifier.clone())),
         BinOp {
             op: BinOperation::Add,
-            ref lhs,
-            ref rhs,
+            lhs,
+            rhs,
         } => {
             let tmp = X86Arg::Var(new_var_name());
             let (prefix, res) = si_expr(lhs);
@@ -163,8 +172,8 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
         }
         BinOp {
             op: BinOperation::Sub,
-            ref lhs,
-            ref rhs,
+            lhs,
+            rhs,
         } => {
             let tmp = X86Arg::Var(new_var_name());
             let (prefix, res) = si_expr(lhs);
@@ -182,19 +191,34 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             });
             (instrs, tmp)
         }
-        BinOp {
-            op: BinOperation::Eq,
-            ref lhs,
-            ref rhs,
-        } => {
-            let tmp = X86Arg::Var(new_var_name());
-            let (prefix, res) = si_expr(lhs);
+        BinOp { op, lhs, rhs } => {
+            let (prefix, res1) = si_expr(lhs);
             let (prefix2, res2) = si_expr(rhs);
             let mut instrs = vec![];
             instrs.extend(prefix);
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Cmpq { a: res, b: res2 });
-            instrs.push(X86Instr::Sete(tmp.clone()));
+            instrs.push(X86Instr::Cmpq { a: res2.clone(), b: res1.clone() });
+            use BinOperation::*;
+            use X86Instr::*;
+            let tmp = X86Arg::Var(new_var_name());
+
+            instrs.extend(match op {
+                Eq => vec![Sete(tmp.clone())],
+                Lt => vec![Setl(tmp.clone())],
+                LEq => vec![Setle(tmp.clone())],
+                Gt => vec![Setg(tmp.clone())],
+                GEq => vec![Setge(tmp.clone())],
+                NEq => vec![Setne(tmp.clone())],
+                And => vec![
+                    Movq{src: res1.clone(), rd: tmp.clone()},
+                    Andq(res2.clone(), tmp.clone()),
+                ],
+                Or => vec![
+                    Movq{src: res1.clone(), rd: tmp.clone()},
+                    Orq(res2.clone(), tmp.clone()),
+                ],
+                _ => todo!("{:?}", op),
+            });
             (instrs, tmp)
         }
         _ => todo!("Unimplemented si_expr {:?}", *exp.as_ref()),

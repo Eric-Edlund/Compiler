@@ -24,6 +24,13 @@ pub enum X86Instr {
     Je{to: X86Arg},
     Jmp(X86Arg),
     Sete(X86Arg),
+    Setl(X86Arg),
+    Setle(X86Arg),
+    Setg(X86Arg),
+    Setge(X86Arg),
+    Setne(X86Arg),
+    Andq(X86Arg, X86Arg),
+    Orq(X86Arg, X86Arg),
 }
 
 impl X86Instr {
@@ -55,6 +62,29 @@ impl X86Instr {
             }
             Jmp(to) => {
                 transform(to);
+            }
+            Setl(rd) => {
+                transform(rd);
+            }
+            Setle(rd) => {
+                transform(rd);
+            }
+            Setg(rd) => {
+                transform(rd);
+            }
+            Setge(rd) => {
+                transform(rd);
+            }
+            Setne(rd) => {
+                transform(rd);
+            }
+            Andq(a, rd) => {
+                transform(a);
+                transform(rd);
+            }
+            Orq(a, rd) => {
+                transform(a);
+                transform(rd);
             }
             x => todo!("{:?}", x)
         }
