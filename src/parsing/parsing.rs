@@ -86,7 +86,7 @@ impl AstNode<'_> {
                 f.write_str(&format!("{}", v))
             }
             Self::Not(expr) => {
-                f.write_str(&"!");
+                f.write_str("!")?;
                 expr.as_ref().fmt_pretty(indent+1, f)
             }
             Self::FunctionDecl { identifier, body } => {
@@ -97,6 +97,7 @@ impl AstNode<'_> {
             Self::BinOp { op, lhs, rhs } => {
                 f.write_str("(")?;
                 lhs.as_ref().fmt_pretty(indent, f)?;
+                println!("{:?} {:?}, {:?}", lhs, rhs, op);
                 f.write_str(&format!(" {:?} ", op))?;
                 rhs.as_ref().fmt_pretty(indent, f)?;
                 f.write_str(")")
