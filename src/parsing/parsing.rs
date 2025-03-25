@@ -534,6 +534,7 @@ fn consume_declaration<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut u
 /// and returns the position of the first token not consumed. This does
 /// not include the semi or ), unless the expression started on a (.
 fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
+    ctx.stack.push("Expresssion".to_string());
     let iter = tokens[*start..].iter().peekable();
 
     // TODO: Raise if given an operator before a value
@@ -621,9 +622,16 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
     let mut exprs = Vec::<BasedAstNode>::new();
     let mut ops = Vec::<BinOperation>::new();
     let mut last_token_was_op = false;
+    let mut is_first_token = true;
 
     while *start < tokens.len() {
         let tok = &tokens[*start];
+        if ctx.print_changes {
+            println!("Take {:?}", tok);
+            println!("Stack: {:?}", ctx.stack);
+            println!("Exprs: {:?}", exprs);
+            println!("Ops: {:?}", ops);
+        }
         *start += 1;
         let op: Option<BinOperation> = match tok.ty {
             TokenType::Semi => break,
@@ -647,7 +655,7 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
                     exprs.push(expr);
                 }
 
-                if !last_token_was_op || ops.last().is_some_and(|x| *x == BinOperation::Call) {
+                if !is_first_token && (!last_token_was_op || ops.last().is_some_and(|x| *x == BinOperation::Call)) {
                     Some(BinOperation::Call)
                 } else {
                     None
@@ -689,17 +697,27 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
             _ => None,
         };
         last_token_was_op = op.is_some();
+        is_first_token = false;
         if let Some(ref op) = op {
             // Apply ops of higher presidence
+            if ctx.print_changes {
+                println!("Collapsing previous lower ops: {:?}", exprs);
+            }
             let presidence = get_presidence(op);
             while ops.last().is_some() && get_presidence(ops.last().unwrap()) > presidence {
+                let op = ops.pop().unwrap();
+                if ctx.print_changes {
+                    println!("Applying op {:?}", op);
+                }
                 let a = exprs.pop().unwrap();
                 let b = exprs.pop().unwrap();
-                let op = ops.pop().unwrap();
                 let e = apply_op(&op, b, a);
                 exprs.push(e);
             }
             ops.push(*op);
+            if ctx.print_changes {
+                println!("Expr stack is now {:?}", exprs);
+            }
         }
     }
 
@@ -712,6 +730,7 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
         exprs.push(e);
     }
 
+    ctx.stack.pop();
     match exprs.pop() {
         Some(e) => Ok(e),
         None => Err(ParseError::other(format!(
@@ -833,5 +852,13 @@ mod tests {
         };
 
         dbg!(&ast);
+    }
+
+    #[test]
+    fn bool_compound_expr() {
+        let toks = lexing::lex(&"print((5+6) == (7+8));");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let ast = consume_expression(&mut ctx, &toks, &mut 0).unwrap();
     }
 }

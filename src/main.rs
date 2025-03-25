@@ -18,6 +18,7 @@ use codegen_stuff::allocate_registers::allocate_registers;
 use codegen_stuff::assembly::{self, render};
 use codegen_stuff::program_setup::prelude_and_conclusion;
 use codegen_stuff::select_instructions::select_instructions;
+use codegen_stuff::type_checking::type_check;
 use core::str;
 use parsing::build_ast;
 use std::fs::File;
@@ -50,6 +51,9 @@ async fn main() {
     if_debug(format!("Program Text:\n\n{}\n", str::from_utf8(&buf).unwrap()));
 
     let mut parsed_file = build_ast(buf, |_| {});
+    let _ = type_check(&parsed_file);
+    if_debug(format!("Passed Type Check."));
+
     if_debug(format!("Parsed AST:\n\n{:?}\n", parsed_file.asts));
     remove_complex_operands(&mut parsed_file);
     if_debug(format!("RCO:\n\n{:?}\n", parsed_file.asts));
