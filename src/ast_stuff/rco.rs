@@ -116,7 +116,7 @@ fn rco_expr<'a>(
     new_stmts: &mut Vec<BasedAstNode<'a>>,
 ) -> BasedAstNode<'a> {
     match unit.as_ref() {
-        Variable { .. } | LiteralNumber(_) => unit.clone(),
+        Variable { .. } | LiteralNumber(_) | LiteralBool(_) => unit.clone(),
         Not(expr) => {
             let expr = rco_expr(expr, new_stmts);
             let tmp: BasedAstNode = Variable {

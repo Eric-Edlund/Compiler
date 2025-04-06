@@ -7,4 +7,5 @@ fn main() {
 	} else {
 		print(0)
 	}
+	print(7)
 }

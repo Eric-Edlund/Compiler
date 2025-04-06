@@ -21,8 +21,8 @@ pub enum X86Instr {
     Popq{rd: X86Arg},
     Cmpq{a: X86Arg, b: X86Arg},
     Retq,
-    Je{to: X86Arg},
-    Jmp(X86Arg),
+    Je(String),
+    Jmp(String),
     Sete(X86Arg),
     Setl(X86Arg),
     Setle(X86Arg),
@@ -57,11 +57,9 @@ impl X86Instr {
             Sete(rd) => {
                 transform(rd);
             }
-            Je {to} => {
-                transform(to);
+            Je(to) => {
             }
             Jmp(to) => {
-                transform(to);
             }
             Setl(rd) => {
                 transform(rd);

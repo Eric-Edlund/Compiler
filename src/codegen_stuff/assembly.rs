@@ -6,6 +6,8 @@ use X86Instr::*;
 pub fn render(program: &X86Program) -> Vec<u8> {
     let mut res = Vec::<u8>::new();
 
+    res.extend("jmp main\n\n".bytes());
+
     for (label, instrs) in &program.blocks {
         res.extend(format!("{}:\n", label).bytes());
 
@@ -26,8 +28,8 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
         Popq { rd } => format!("  popq {}\n", render_expr(rd)),
         Cmpq {a, b} => format!("  cmpq {}, {}\n", render_expr(a), render_expr(b)),
         Retq => "  retq\n".to_string(),
-        Je{to} => format!("  je {}\n", render_expr(to)),
-        Jmp(to) => format!("  jmp {}\n", render_expr(to)),
+        Je(to) => format!("  je {}\n", to),
+        Jmp(to) => format!("  jmp {}\n", to),
         Sete(rd) => format!("  sete {}\n", render_expr(rd)),
         Setl(rd) => format!("  setl {}\n", render_expr(rd)),
         Setle(rd) => format!("  setle {}\n", render_expr(rd)),

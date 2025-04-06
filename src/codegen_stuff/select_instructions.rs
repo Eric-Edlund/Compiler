@@ -66,7 +66,7 @@ fn si_stmt(
             blocks
                 .get_mut(current_block)
                 .unwrap()
-                .push(X86Instr::Jmp(X86Arg::Label("conclusion".to_string())));
+                .push(X86Instr::Jmp("conclusion".to_string()));
         }
         FunctionCall { function, ref args } => {
             let Variable { identifier } = function.as_ref() else {
@@ -100,9 +100,6 @@ fn si_stmt(
             let then_label = format!("LThen");
             let else_label = format!("LElse");
             let cont_label = format!("Continuation");
-            let l_else = X86Arg::Label(else_label.clone());
-            let l_then = X86Arg::Label(then_label.clone());
-            let l_cont = X86Arg::Label(cont_label.clone());
             blocks
                 .get_mut(current_block)
                 .unwrap()
@@ -112,8 +109,8 @@ fn si_stmt(
                     a: condition,
                     b: X86Arg::Immed { val: 0 },
                 },
-                X86Instr::Je { to: l_else },
-                X86Instr::Jmp(l_then),
+                X86Instr::Je(else_label.clone()),
+                X86Instr::Jmp(then_label.clone()),
             ]);
 
             *current_block = then_label.clone();
@@ -122,7 +119,7 @@ fn si_stmt(
             blocks
                 .get_mut(current_block)
                 .unwrap()
-                .push(X86Instr::Jmp(l_cont.clone()));
+                .push(X86Instr::Jmp(cont_label.clone()));
 
             if let Some(else_blk) = else_blk {
                 *current_block = else_label.clone();
@@ -131,7 +128,7 @@ fn si_stmt(
                 blocks
                     .get_mut(current_block)
                     .unwrap()
-                    .push(X86Instr::Jmp(l_cont.clone()));
+                    .push(X86Instr::Jmp(cont_label.clone()));
             }
 
             *current_block = cont_label.clone();
@@ -148,6 +145,7 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
     use AstNode::*;
     match exp.as_ref() {
         LiteralNumber(val) => (vec![], X86Arg::Immed { val: *val as u64 }),
+        LiteralBool(val) => (vec![], X86Arg::Immed { val: *val as u64 }),
         Variable { identifier } => (vec![], X86Arg::Var(identifier.clone())),
         BinOp {
             op: BinOperation::Add,

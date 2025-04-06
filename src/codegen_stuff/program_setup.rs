@@ -8,7 +8,7 @@ pub fn prelude_and_conclusion(program: &mut X86Program) {
         Subq{val: Immed{val: program.required_stack_size as u64}, rd: Reg("rsp".to_string())},
         Movq{src: Reg("rsp".to_string()), rd: Reg("rbp".to_string())},
         Pushq{ rd: Reg("rbp".to_string())},
-        Jmp(X86Arg::Label("start".to_string())),
+        Jmp("start".to_string()),
     ]);
 
     program.blocks.insert("conclusion".to_string(), vec![
