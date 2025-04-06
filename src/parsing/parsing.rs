@@ -941,7 +941,7 @@ mod tests {
         };
         assert_eq!(*op, BinOperation::And);
 
-        assert_eq!(BinOperation::Eq, *op);
+        assert_eq!(BinOperation::And, *op);
 
     }
 }
