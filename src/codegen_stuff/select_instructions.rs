@@ -47,6 +47,7 @@ fn si_stmt(
         Assignment { lhs, rhs } => {
             let (mut prepare_value, arg) = si_expr(rhs);
             let Variable { identifier } = lhs.as_ref() else {
+                dbg!(lhs);
                 panic!("Assignments only should assign to variables.");
             };
 
@@ -184,6 +185,27 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             });
             instrs.extend(prefix2);
             instrs.push(X86Instr::Subq {
+                val: res2,
+                rd: tmp.clone(),
+            });
+            (instrs, tmp)
+        }
+        BinOp {
+            op: BinOperation::Mult,
+            lhs,
+            rhs,
+        } => {
+            let tmp = X86Arg::Var(new_var_name());
+            let (prefix, res) = si_expr(lhs);
+            let (prefix2, res2) = si_expr(rhs);
+            let mut instrs = vec![];
+            instrs.extend(prefix);
+            instrs.push(X86Instr::Movq {
+                src: res,
+                rd: tmp.clone(),
+            });
+            instrs.extend(prefix2);
+            instrs.push(X86Instr::Mulq {
                 val: res2,
                 rd: tmp.clone(),
             });

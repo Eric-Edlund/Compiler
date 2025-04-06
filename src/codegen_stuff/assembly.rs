@@ -22,6 +22,7 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
     let bytes = match instr {
         Addq { val, rd } => format!("  addq {}, {}\n", render_expr(val), render_expr(rd)),
         Subq { val, rd } => format!("  subq {}, {}\n", render_expr(val), render_expr(rd)),
+        Mulq { val, rd } => format!("  mulq {}, {}\n", render_expr(val), render_expr(rd)),
         Movq { src, rd } => format!("  movq {}, {}\n", render_expr(src), render_expr(rd)),
         Callq { label } => format!("  callq {}\n", label),
         Pushq {rd} => format!("  pushq {}\n", render_expr(rd)),

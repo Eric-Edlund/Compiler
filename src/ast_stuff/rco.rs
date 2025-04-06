@@ -82,7 +82,7 @@ fn rco_stmt<'a>(unit: &mut BasedAstNode<'a>, new_stmts: &mut Vec<BasedAstNode<'a
         }
         Assignment { lhs, rhs } => {
             let result = rco_expr(rhs, new_stmts);
-            *lhs = result.clone();
+            *rhs = result.clone();
         }
         Declaration { identifier, rhs } => {
             let new_rhs = rco_expr(rhs, new_stmts);

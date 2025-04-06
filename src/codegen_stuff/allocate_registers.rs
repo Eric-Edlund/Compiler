@@ -246,7 +246,8 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
     use X86Instr::*;
     match instr {
         Addq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
-        Subq { val, rd } => as_var(val),
+        Subq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
+        Mulq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Cmpq { a, b } => {
             let mut r = as_var(a);
             r.extend(as_var(b));
@@ -287,6 +288,7 @@ fn writes_of(instr: &X86Instr) -> Vec<&str> {
     match instr {
         Addq { val, rd } => as_var(rd),
         Subq { val, rd } => as_var(rd),
+        Mulq { val, rd } => as_var(rd),
         Cmpq { .. } => vec![],
         Movq { src, rd } => as_var(rd),
         Retq => vec![],

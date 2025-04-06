@@ -16,6 +16,7 @@ pub enum X86Instr {
     Movq{src: X86Arg, rd: X86Arg},
     Addq{val: X86Arg, rd: X86Arg},
     Subq{val: X86Arg, rd: X86Arg},
+    Mulq{val: X86Arg, rd: X86Arg},
     Callq{label: String},
     Pushq{rd: X86Arg},
     Popq{rd: X86Arg},
@@ -47,6 +48,10 @@ impl X86Instr {
                 transform(rd);
             }
             Subq{val, rd} => {
+                transform(val);
+                transform(rd);
+            }
+            Mulq{val, rd} => {
                 transform(val);
                 transform(rd);
             }
