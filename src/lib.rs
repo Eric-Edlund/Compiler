@@ -9,6 +9,7 @@
 )]
 
 use codegen_stuff::assembly::render;
+use codegen_stuff::patch_instructions::patch_instructions;
 use parsing::build_ast;
 use ast_stuff::explicate_control::explicate_control;
 use ast_stuff::rco::remove_complex_operands;
@@ -37,6 +38,7 @@ pub fn compile_program(src: &str) -> CompileResult {
     allocate_registers(&mut x86_program);
     // if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     prelude_and_conclusion(&mut x86_program);
+    patch_instructions(&mut x86_program);
 
     let program_assembly = render(&x86_program);
     return Ok(program_assembly)

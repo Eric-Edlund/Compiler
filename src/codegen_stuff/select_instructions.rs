@@ -9,9 +9,16 @@ use super::common::{X86Instr, X86Program};
 
 static LAST_VAR_NUMBER: Mutex<u32> = Mutex::new(0);
 fn new_var_name() -> String {
-    let mut curr = *LAST_VAR_NUMBER.lock().unwrap();
-    curr += 1;
-    return format!("si_tmp_{}", curr);
+    let mut curr = LAST_VAR_NUMBER.lock().unwrap();
+    *curr += 1;
+    return format!("si_tmp_{}", *curr);
+}
+
+static LAST_LABEL_NUM: Mutex<u32> = Mutex::new(0);
+fn next_label() -> String {
+    let mut curr = LAST_LABEL_NUM.lock().unwrap();
+    *curr += 1;
+    return format!("L{}", *curr);
 }
 
 pub fn select_instructions(file: &FileAnal) -> X86Program {
@@ -98,9 +105,10 @@ fn si_stmt(
             else_blk,
         } => {
             let (condition_instrs, condition) = si_expr(condition);
-            let then_label = format!("LThen");
-            let else_label = format!("LElse");
-            let cont_label = format!("Continuation");
+            let then_label = next_label();
+            let else_label = next_label();
+            let cont_label = next_label();
+            assert_ne!(&then_label, &else_label);
             blocks
                 .get_mut(current_block)
                 .unwrap()
@@ -108,7 +116,7 @@ fn si_stmt(
             blocks.get_mut(current_block).unwrap().extend([
                 X86Instr::Cmpq {
                     a: condition,
-                    b: X86Arg::Immed { val: 0 },
+                    b: X86Arg::Immed(0),
                 },
                 X86Instr::Je(else_label.clone()),
                 X86Instr::Jmp(then_label.clone()),
@@ -145,8 +153,8 @@ fn si_stmt(
 fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
     use AstNode::*;
     match exp.as_ref() {
-        LiteralNumber(val) => (vec![], X86Arg::Immed { val: *val as u64 }),
-        LiteralBool(val) => (vec![], X86Arg::Immed { val: *val as u64 }),
+        LiteralNumber(val) => (vec![], X86Arg::Immed(*val as u64)),
+        LiteralBool(val) => (vec![], X86Arg::Immed(*val as u64)),
         Variable { identifier } => (vec![], X86Arg::Var(identifier.clone())),
         BinOp {
             op: BinOperation::Add,
@@ -205,8 +213,9 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
                 rd: tmp.clone(),
             });
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Mulq {
+            instrs.push(X86Instr::Imulq {
                 val: res2,
+                b: tmp.clone(),
                 rd: tmp.clone(),
             });
             (instrs, tmp)
@@ -217,7 +226,10 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let mut instrs = vec![];
             instrs.extend(prefix);
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Cmpq { a: res2.clone(), b: res1.clone() });
+            instrs.push(X86Instr::Cmpq {
+                a: res2.clone(),
+                b: res1.clone(),
+            });
             use BinOperation::*;
             use X86Instr::*;
             let tmp = X86Arg::Var(new_var_name());
@@ -230,11 +242,17 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
                 GEq => vec![Setge(tmp.clone())],
                 NEq => vec![Setne(tmp.clone())],
                 And => vec![
-                    Movq{src: res1.clone(), rd: tmp.clone()},
+                    Movq {
+                        src: res1.clone(),
+                        rd: tmp.clone(),
+                    },
                     Andq(res2.clone(), tmp.clone()),
                 ],
                 Or => vec![
-                    Movq{src: res1.clone(), rd: tmp.clone()},
+                    Movq {
+                        src: res1.clone(),
+                        rd: tmp.clone(),
+                    },
                     Orq(res2.clone(), tmp.clone()),
                 ],
                 _ => todo!("{:?}", op),

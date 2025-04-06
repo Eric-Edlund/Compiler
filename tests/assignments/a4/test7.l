@@ -1,4 +1,4 @@
-// {"compiles": true}
+// {"compiles": true, "stdout": "10\n"}
 
 fn main() {
     if (5+6) == 7 {

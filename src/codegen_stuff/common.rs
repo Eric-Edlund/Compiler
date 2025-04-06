@@ -1,10 +1,9 @@
 use ordered_hash_map::OrderedHashMap;
 
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum X86Arg {
     Reg(String),
-    Immed{val: u64},
+    Immed(u64),
     Label(String),
     Deref(String, i32),
     // Pseudo assembly
@@ -13,16 +12,17 @@ pub enum X86Arg {
 
 #[derive(Debug)]
 pub enum X86Instr {
-    Movq{src: X86Arg, rd: X86Arg},
-    Addq{val: X86Arg, rd: X86Arg},
-    Subq{val: X86Arg, rd: X86Arg},
-    Mulq{val: X86Arg, rd: X86Arg},
-    Callq{label: String},
-    Pushq{rd: X86Arg},
-    Popq{rd: X86Arg},
-    Cmpq{a: X86Arg, b: X86Arg},
+    Movq { src: X86Arg, rd: X86Arg },
+    Addq { val: X86Arg, rd: X86Arg },
+    Subq { val: X86Arg, rd: X86Arg },
+    Imulq { val: X86Arg, b: X86Arg, rd: X86Arg },
+    Callq { label: String },
+    Pushq { rd: X86Arg },
+    Popq { rd: X86Arg },
+    Cmpq { a: X86Arg, b: X86Arg },
     Retq,
     Je(String),
+    Jne(String),
     Jmp(String),
     Sete(X86Arg),
     Setl(X86Arg),
@@ -38,34 +38,34 @@ impl X86Instr {
     pub fn transform_args<T: Fn(&mut X86Arg)>(&mut self, transform: T) {
         use X86Instr::*;
         match self {
-            Retq | Callq{..} => {},
-            Movq{src, rd} => {
+            Retq | Callq { .. } => {}
+            Movq { src, rd } => {
                 transform(src);
                 transform(rd);
             }
-            Addq{val, rd} => {
+            Addq { val, rd } => {
                 transform(val);
                 transform(rd);
             }
-            Subq{val, rd} => {
+            Subq { val, rd } => {
                 transform(val);
                 transform(rd);
             }
-            Mulq{val, rd} => {
+            Imulq { val, b, rd } => {
                 transform(val);
+                transform(b);
                 transform(rd);
             }
-            Cmpq{a, b} => {
+            Cmpq { a, b } => {
                 transform(a);
                 transform(b);
             }
             Sete(rd) => {
                 transform(rd);
             }
-            Je(to) => {
-            }
-            Jmp(to) => {
-            }
+            Je(to) => {}
+            Jne(to) => {}
+            Jmp(to) => {}
             Setl(rd) => {
                 transform(rd);
             }
@@ -89,7 +89,7 @@ impl X86Instr {
                 transform(a);
                 transform(rd);
             }
-            x => todo!("{:?}", x)
+            x => todo!("{:?}", x),
         }
     }
 }

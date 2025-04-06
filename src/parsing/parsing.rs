@@ -80,6 +80,8 @@ impl std::fmt::Debug for AstNode<'_> {
 }
 
 impl AstNode<'_> {
+    /// The first line of output always is printed without adding indent. Multiline
+    /// structures add indent to all subsequent lines.
     fn fmt_pretty(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::LiteralBool(v) => {
@@ -105,7 +107,7 @@ impl AstNode<'_> {
             Self::Block { stmts } => {
                 f.write_str("{\n")?;
                 for stmt in stmts {
-                    f.write_str(&"  ".repeat(indent))?;
+                    f.write_str(&"  ".repeat(indent + 1))?;
                     stmt.as_ref().fmt_pretty(indent + 1, f)?;
                     f.write_str("\n")?;
                 }

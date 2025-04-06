@@ -1,4 +1,4 @@
-// {"compiles": true}
+// {"compiles": true, "stdout": "1\n"}
 
 
 fn main() {

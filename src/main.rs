@@ -16,6 +16,7 @@ use ast_stuff::rco::remove_complex_operands;
 use clap::Parser;
 use codegen_stuff::allocate_registers::allocate_registers;
 use codegen_stuff::assembly::{self, render};
+use codegen_stuff::patch_instructions::{self, patch_instructions};
 use codegen_stuff::program_setup::prelude_and_conclusion;
 use codegen_stuff::select_instructions::select_instructions;
 use codegen_stuff::type_checking::type_check;
@@ -61,11 +62,13 @@ async fn main() {
     let mut x86_program = select_instructions(&parsed_file);
     if_debug(format!("Select Instructions:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     allocate_registers(&mut x86_program);
-    // if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
+    if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     prelude_and_conclusion(&mut x86_program);
 
-    if_debug(format!("X86Program:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
+    if_debug(format!("Prelude & Conclusion:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
+    patch_instructions(&mut x86_program);
     let program_assembly = assembly::render(&x86_program);
+    
 
     let mut out = File::create(&args.output_file).unwrap();
     out.write_all(&program_assembly).unwrap();

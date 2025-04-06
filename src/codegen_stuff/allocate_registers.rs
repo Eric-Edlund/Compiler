@@ -38,7 +38,6 @@ pub fn allocate_registers(program: &mut X86Program) {
     let mut changed = true;
     while changed {
         changed = false;
-        dbg!("Live after pass");
         live_set_pass(program, &mut solution, &mut changed);
     }
 
@@ -50,9 +49,7 @@ pub fn allocate_registers(program: &mut X86Program) {
             .collect::<Vec<_>>();
         extend_interference_graph(&mut interference_graph, &live_sets);
     }
-    dbg!("Graph:", &interference_graph);
     let coloring = disjoint_coloring(&interference_graph);
-    dbg!("Colorings:", &coloring);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
     let variable_homes = assign_homes(&coloring);
     assert_eq!(coloring.len(), variable_homes.len());
@@ -62,7 +59,6 @@ pub fn allocate_registers(program: &mut X86Program) {
             instr.transform_args(|arg| {
                 use X86Arg::*;
                 if let Var(name) = arg {
-                    dbg!(&name);
                     *arg = variable_homes[name].clone();
                 }
             })
@@ -247,7 +243,7 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
     match instr {
         Addq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Subq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
-        Mulq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
+        Imulq { val, b, rd } => as_var(val).into_iter().chain(as_var(b)).collect(),
         Cmpq { a, b } => {
             let mut r = as_var(a);
             r.extend(as_var(b));
@@ -256,7 +252,7 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
         Movq { src, rd } => as_var(src),
         Retq => vec![],
         Callq { label } => vec![],
-        Je(label) | Jmp(label) => ctx.program_pts[label.as_str()]
+        Je(label) | Jne(label) | Jmp(label) => ctx.program_pts[label.as_str()]
             .first()
             .unwrap()
             .live
@@ -288,12 +284,13 @@ fn writes_of(instr: &X86Instr) -> Vec<&str> {
     match instr {
         Addq { val, rd } => as_var(rd),
         Subq { val, rd } => as_var(rd),
-        Mulq { val, rd } => as_var(rd),
+        Imulq { val, b, rd } => as_var(rd),
         Cmpq { .. } => vec![],
         Movq { src, rd } => as_var(rd),
         Retq => vec![],
         Callq { label } => vec![],
         Je { .. } => vec![],
+        Jne { .. } => vec![],
         Sete(rd) => as_var(rd),
         Setl(rd) => as_var(rd),
         Setle(rd) => as_var(rd),

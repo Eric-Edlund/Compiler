@@ -1,7 +1,7 @@
-// {"compiles": false}
-// TODO: Unary negation
+// {"compiles": true, "stdout": "9\n"}
 
 fn main() {
+    // x = false
     let x = ((5 == 6) and ((6+7) > 3) or (5 < 3))
 
     if !x {
