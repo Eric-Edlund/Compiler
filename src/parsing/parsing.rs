@@ -317,10 +317,10 @@ type PResult<T> = Result<T, ParseError>;
 
 pub fn parse_file<'a, ErrConsumer>(
     tokens: &'a [Token],
-    err_cb: ErrConsumer,
+    mut err_cb: ErrConsumer,
 ) -> Vec<BasedAstNode<'a>>
 where
-    ErrConsumer: Fn(ParseError),
+    ErrConsumer: FnMut(ParseError),
 {
     let mut i = 0 as usize;
 
@@ -342,7 +342,7 @@ where
             TokenType::LineComment => {}
             tok => {
                 err_cb(ParseError::unexpected(token, "File top level", None));
-                // TODO: Don't give up after the first problem, recover some how.
+                // TODO: Don't give up after the first problem, recover somehow.
                 return result;
             }
         }
@@ -742,7 +742,8 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
             TokenType::GCmp => Some(BinOperation::Gt),
             TokenType::GEqCmp => Some(BinOperation::GEq),
             TokenType::LEqCmp => Some(BinOperation::LEq),
-            _ => None,
+            TokenType::Bang => Some(BinOperation::Bang),
+            other => panic!("Expression encountered {:?}", other),
         };
         last_token_was_op = op.is_some();
         is_first_token = false;
@@ -775,11 +776,14 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
     }
 
     // Apply remaining ops in order
-    while ops.last().is_some() {
+    while let Some(op) = ops.pop() {
         let a = exprs.pop().unwrap();
-        let b = exprs.pop().unwrap();
-        let op = ops.pop().unwrap();
-        let e = apply_op(&op, b, a);
+        let e = if op == BinOperation::Bang {
+            apply_unary(&op, a)
+        } else {
+            let b = exprs.pop().unwrap();
+            apply_op(&op, b, a)
+        };
         exprs.push(e);
     }
 
@@ -801,6 +805,7 @@ mod tests {
     };
 
     use super::consume_expression;
+    use super::parse_file;
 
     #[test]
     fn shunting_yard_1() {
@@ -926,6 +931,15 @@ mod tests {
         let BinOp { op, lhs, rhs } = ast.as_ref() else {
             panic!();
         };
+        let Not(llhs) = lhs.as_ref() else {
+            panic!();
+        };
+        let LiteralBool(true) = llhs.as_ref() else {
+            panic!()
+        };
+        let LiteralBool(false) = rhs.as_ref() else {
+            panic!()
+        };
 
         assert_eq!(BinOperation::Eq, *op);
     }
@@ -933,7 +947,7 @@ mod tests {
     #[test]
     fn and_or() {
         use AstNode::*;
-        let toks = lexing::lex(&"true and false");
+        let toks = lexing::lex(&"true and false or false");
         let mut ctx = Context::new();
         ctx.print_changes = true;
         let ast = consume_expression(&mut ctx, &toks, &mut 0).unwrap();
@@ -943,7 +957,30 @@ mod tests {
         };
         assert_eq!(*op, BinOperation::And);
 
-        assert_eq!(BinOperation::And, *op);
+        let BinOp {op, lhs, rhs} = rhs.as_ref() else {
+            panic!();
+        };
+        assert_eq!(*op, BinOperation::Or);
+    }
 
+    #[test]
+    fn a4_4() {
+        let toks = lexing::lex(
+&r#"
+// {"compiles": true, "stdout": "9\n"}
+
+fn main() {
+    // x = false
+
+    let x = ((5 == 6) and ((6+7) > 3) or (5 < 3));
+
+    if !x {
+        print(9);
+    } else {
+        print(10);
+    }
+}
+"#);
+        let _ = parse_file(&toks, |err| {panic!("Parse error: {:?}", err)});
     }
 }

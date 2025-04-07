@@ -16,11 +16,12 @@ use ast_stuff::rco::remove_complex_operands;
 use clap::Parser;
 use codegen_stuff::allocate_registers::allocate_registers;
 use codegen_stuff::assembly::{self, render};
-use codegen_stuff::patch_instructions::{self, patch_instructions};
+use codegen_stuff::patch_instructions::patch_instructions;
 use codegen_stuff::program_setup::prelude_and_conclusion;
 use codegen_stuff::select_instructions::select_instructions;
 use codegen_stuff::type_checking::type_check;
 use core::str;
+use std::process::exit;
 use parsing::build_ast;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -51,7 +52,7 @@ async fn main() {
     root.read_to_end(&mut buf).unwrap();
     if_debug(format!("Program Text:\n\n{}\n", str::from_utf8(&buf).unwrap()));
 
-    let mut parsed_file = build_ast(buf, |_| {});
+    let mut parsed_file = build_ast(buf, |prb| {println!("Parse error: {:?}", prb); exit(1)});
     let _ = type_check(&parsed_file);
     if_debug(format!("Passed Type Check."));
 

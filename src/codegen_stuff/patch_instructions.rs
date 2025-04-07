@@ -41,6 +41,21 @@ where
                 b: Reg("rax".to_string()),
             })
         }
+        // Cmpq only accepts one memory location
+        Cmpq {
+            a: Deref(r1, offset1),
+            b: Deref(r2, offset2),
+        } => {
+            push(Movq {
+                src: Deref(r1, offset1),
+                rd: Reg("rax".to_string()),
+            });
+            push(Cmpq {
+                a: Reg("rax".to_string()),
+                b: Deref(r2, offset2),
+            });
+        }
+
         // Movq only accepts one memory location
         Movq {
             src: Deref(r1, offset1),
@@ -54,6 +69,19 @@ where
                 src: Reg("rax".to_string()),
                 rd: Deref(r2, offset2),
             });
+        }
+        Orq(
+            Deref(r1, offset1),
+            Deref(r2, offset2),
+        ) => {
+            push(Movq {
+                src: Deref(r1, offset1),
+                rd: Reg("rax".to_string()),
+            });
+            push(Orq (
+                Reg("rax".to_string()),
+                Deref(r2, offset2),
+            ));
         }
         Addq {
             val: Deref(r1, offset1),
@@ -94,13 +122,15 @@ where
     R: AsRef<str>,
 {
     match reg.as_ref() {
-        "rdx" => "dl",
+        "rax" => "al",
+        "rbx" => "bl",
         "rcx" => "cl",
-        "rsi" => "sil", // TODO: Real?
-        "r8" => "r8b",  // intel uses r8b, and amd uses r8l (stackoverflow says)
+        "rdx" => "dl",
+        "rsi" => "sil",
+        "r8" => "r8b",  // intel uses r8b, and amd uses r8l (I'm reading)
         "r9" => "r9b",
         "r10" => "r10b",
-        "rbx" => "bl",
+        "r11" => "r11b",
         "r12" => "r12b",
         "r13" => "r13b",
         "r14" => "r14b",

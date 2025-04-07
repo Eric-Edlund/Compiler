@@ -27,7 +27,11 @@ pub mod codegen_stuff;
 type CompileResult = Result<Vec<u8>, Vec<String>>;
 
 pub fn compile_program(src: &str) -> CompileResult {
-    let mut parsed_file = build_ast(src, |_| {});
+    let mut syntax_err = false;
+    let mut parsed_file = build_ast(src, |_| {syntax_err = true;});
+    if syntax_err {
+        return Err(vec!["Syntax error.".to_string()]);
+    }
     let type_res = type_check(&parsed_file);
     type_res?;
 

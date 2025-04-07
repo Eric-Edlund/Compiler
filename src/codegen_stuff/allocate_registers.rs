@@ -3,7 +3,7 @@ use core::fmt;
 use std::collections::{HashMap, HashSet};
 
 const AVAILABLE_REGISTERS: &[&str] = &[
-    "rdx", "rcx", "rsi", "r8", "r9", "r10", "rbx", "r12", "r13", "r14",
+    "rbx", "rcx", "rdx", "rsi", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
 ];
 // Does not include rdi because we use that for function calls
 

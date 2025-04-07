@@ -154,6 +154,7 @@ mod tests {
 let x = 7; // Comment
 
 fn cat() {
+    // Comment 2
     return 1 + 9
 } if else
 ");
@@ -181,12 +182,13 @@ fn cat() {
         assert_eq!(tokens[8].ty, TokenType::LParen);
         assert_eq!(tokens[9].ty, TokenType::RParen);
         assert_eq!(tokens[10].ty, TokenType::LBrace);
-        assert_eq!(tokens[11].ty, TokenType::Return);
-        assert_eq!(tokens[12].ty, TokenType::NumberLit);
-        assert_eq!(tokens[13].ty, TokenType::OpAdd);
-        assert_eq!(tokens[14].ty, TokenType::NumberLit);
-        assert_eq!(tokens[15].ty, TokenType::RBrace);
-        assert_eq!(tokens[16].ty, TokenType::If);
-        assert_eq!(tokens[17].ty, TokenType::Else);
+        assert_eq!(tokens[11].ty, TokenType::LineComment);
+        assert_eq!(tokens[12].ty, TokenType::Return);
+        assert_eq!(tokens[13].ty, TokenType::NumberLit);
+        assert_eq!(tokens[14].ty, TokenType::OpAdd);
+        assert_eq!(tokens[15].ty, TokenType::NumberLit);
+        assert_eq!(tokens[16].ty, TokenType::RBrace);
+        assert_eq!(tokens[17].ty, TokenType::If);
+        assert_eq!(tokens[18].ty, TokenType::Else);
     }
 }

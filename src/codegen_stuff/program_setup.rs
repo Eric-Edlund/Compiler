@@ -7,10 +7,18 @@ pub fn prelude_and_conclusion(program: &mut X86Program) {
     program.blocks.insert("main".to_string(), vec![
         // For some reason, on my machine the registers start with initial junk values.
         Movq{src: Immed(0), rd: Reg("rsi".to_string())},
+        Movq{src: Immed(0), rd: Reg("rdi".to_string())},
         Movq{src: Immed(0), rd: Reg("rax".to_string())},
         Movq{src: Immed(0), rd: Reg("rbx".to_string())},
         Movq{src: Immed(0), rd: Reg("rcx".to_string())},
         Movq{src: Immed(0), rd: Reg("rdx".to_string())},
+        Movq{src: Immed(0), rd: Reg("r8".to_string())},
+        Movq{src: Immed(0), rd: Reg("r9".to_string())},
+        Movq{src: Immed(0), rd: Reg("r10".to_string())},
+        Movq{src: Immed(0), rd: Reg("r11".to_string())},
+        Movq{src: Immed(0), rd: Reg("r12".to_string())},
+        Movq{src: Immed(0), rd: Reg("r13".to_string())},
+        Movq{src: Immed(0), rd: Reg("r14".to_string())},
 
         // Stack setup
         Subq{val: Immed(program.required_stack_size as u64), rd: Reg("rsp".to_string())},

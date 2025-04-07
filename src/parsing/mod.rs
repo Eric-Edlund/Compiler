@@ -12,7 +12,7 @@ pub struct FileAnal<'a> {
 
 /// Build an ast for every top level structure in the file, in the order they appear.
 pub fn build_ast<'a, F>(buf: impl AsRef<[u8]>, err_cb: F) -> FileAnal<'a> 
-where F: Fn(ParseError)
+where F: FnMut(ParseError)
 {
     // let mut buf = Vec::<u8>::with_capacity(f.metadata().unwrap().len() as usize);
     // let _ = f.read(&mut buf).unwrap();
