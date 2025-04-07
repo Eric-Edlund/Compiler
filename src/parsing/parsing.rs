@@ -67,6 +67,7 @@ pub enum AstNode<'a> {
         else_blk: Option<BasedAstNode<'a>>,
     },
     WhileStmt {
+        // Begin blk is always a Block
         begin_blk: BasedAstNode<'a>,
         condition: BasedAstNode<'a>,
         body_blk: BasedAstNode<'a>,
@@ -84,15 +85,14 @@ impl AstNode<'_> {
     /// structures add indent to all subsequent lines.
     fn fmt_pretty(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::LiteralBool(v) => {
-                f.write_str(&format!("{}", v))
-            }
+            Self::LiteralBool(v) => f.write_str(&format!("{}", v)),
             Self::Not(expr) => {
                 f.write_str("!")?;
-                expr.as_ref().fmt_pretty(indent+1, f)
+                expr.as_ref().fmt_pretty(indent + 1, f)
             }
             Self::FunctionDecl { identifier, body } => {
-                f.write_str(&format!("FunctionDecl {}\n", identifier))?;
+                f.write_str(&"  ".repeat(indent))?;
+                f.write_str(&format!("fn {}() ", identifier))?;
                 body.as_ref().fmt_pretty(indent + 1, f)
             }
             Self::LiteralNumber(arg0) => f.write_str(&format!("{}", arg0)),
@@ -111,7 +111,7 @@ impl AstNode<'_> {
                     stmt.as_ref().fmt_pretty(indent + 1, f)?;
                     f.write_str("\n")?;
                 }
-                
+
                 f.write_str(&"  ".repeat(indent))?;
                 f.write_str("}")?;
                 Ok(())
@@ -146,12 +146,13 @@ impl AstNode<'_> {
                 begin_blk,
                 condition,
                 body_blk,
-            } => f
-                .debug_struct("WhileStmt")
-                .field("begin_blk", begin_blk)
-                .field("condition", condition)
-                .field("body_blk", body_blk)
-                .finish(),
+            } => {
+                f.write_str("while ")?;
+                condition.as_ref().fmt_pretty(indent, f)?;
+                f.write_str(" ")?;
+                body_blk.as_ref().fmt_pretty(indent, f)?;
+                Ok(())
+            }
         }
     }
     pub fn child_nodes(&self) -> Vec<BasedAstNode> {
@@ -164,13 +165,13 @@ impl AstNode<'_> {
                 let mut res = vec![body.clone()];
                 res.append(&mut body.child_nodes());
                 res
-            },
+            }
             LiteralNumber(_) => vec![],
             BinOp { op, lhs, rhs } => {
                 let mut res = lhs.child_nodes();
                 res.append(&mut rhs.child_nodes());
                 res
-            },
+            }
             Block { stmts } => {
                 let mut res = vec![];
                 for stmt in stmts {
@@ -178,20 +179,20 @@ impl AstNode<'_> {
                     res.append(&mut stmt.child_nodes());
                 }
                 res
-            },
+            }
             Declaration { identifier, rhs } => rhs.child_nodes(),
             Assignment { lhs, rhs } => {
                 let mut res = vec![lhs.clone(), rhs.clone()];
                 res.append(&mut lhs.child_nodes());
                 res.append(&mut rhs.child_nodes());
                 res
-            },
+            }
             FunctionCall { function, args } => {
                 let mut res = vec![function.clone(), args.clone()];
                 res.append(&mut function.child_nodes());
                 res.append(&mut args.child_nodes());
                 res
-            },
+            }
             Variable { identifier } => vec![],
             CommaList { elements } => {
                 let mut res = elements.clone();
@@ -199,7 +200,7 @@ impl AstNode<'_> {
                     res.append(&mut el.child_nodes());
                 }
                 res
-            },
+            }
             EmptyParens => vec![],
             Return { value } => {
                 if let Some(value) = value {
@@ -209,8 +210,12 @@ impl AstNode<'_> {
                 } else {
                     vec![]
                 }
-            },
-            IfStmt { condition, then_blk, else_blk } => {
+            }
+            IfStmt {
+                condition,
+                then_blk,
+                else_blk,
+            } => {
                 let mut res = vec![condition.clone(), then_blk.clone()];
                 res.append(&mut condition.child_nodes());
                 res.append(&mut then_blk.child_nodes());
@@ -219,14 +224,18 @@ impl AstNode<'_> {
                     res.append(&mut else_blk.child_nodes());
                 }
                 res
-            },
-            WhileStmt { begin_blk, condition, body_blk } => {
+            }
+            WhileStmt {
+                begin_blk,
+                condition,
+                body_blk,
+            } => {
                 let mut res = vec![begin_blk.clone(), condition.clone(), body_blk.clone()];
                 res.append(&mut condition.child_nodes());
                 res.append(&mut begin_blk.child_nodes());
                 res.append(&mut body_blk.child_nodes());
                 res
-            },
+            }
         }
     }
 }
@@ -363,7 +372,6 @@ impl Context {
             stack: vec![],
             print_changes: false,
         }
-
     }
     fn push(&mut self, a: impl Into<String>) {
         let s = a.into();
@@ -377,12 +385,15 @@ impl Context {
         let prev = self.stack.pop().unwrap();
         if self.print_changes {
             println!("Popped {}, top now {:?}", prev, self.stack.first())
-
         }
     }
 }
 
-fn consume_function<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
+fn consume_function<'a>(
+    ctx: &mut Context,
+    tokens: &'a [Token],
+    start: &mut usize,
+) -> PResult<BasedAstNode<'a>> {
     let iter = RefCell::new(tokens[*start - 1..].iter());
     *start -= 1;
     let start = RefCell::new(start);
@@ -422,7 +433,11 @@ fn consume_function<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usiz
 }
 
 /// start should be the first token to consume, probably {
-fn consume_block<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
+fn consume_block<'a>(
+    ctx: &mut Context,
+    tokens: &'a [Token],
+    start: &mut usize,
+) -> PResult<BasedAstNode<'a>> {
     let start = RefCell::new(start);
 
     let take = || {
@@ -466,6 +481,24 @@ fn consume_block<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) 
                         condition: expr,
                         then_blk,
                         else_blk,
+                    }
+                    .into(),
+                )
+            }
+            TokenType::While => {
+                ctx.push("While condition");
+                let expr = consume_expression(ctx, tokens, *start.borrow_mut())?;
+                ctx.pop();
+                let begin_blk = AstNode::Block { stmts: vec![] }.into();
+                ctx.push("Body blk");
+                let body_blk = consume_block(ctx, tokens, *start.borrow_mut())?;
+                ctx.pop();
+
+                stmts.push(
+                    WhileStmt {
+                        begin_blk,
+                        condition: expr,
+                        body_blk,
                     }
                     .into(),
                 )
@@ -514,7 +547,11 @@ fn consume_block<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) 
     })
 }
 
-fn consume_declaration<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
+fn consume_declaration<'a>(
+    ctx: &mut Context,
+    tokens: &'a [Token],
+    start: &mut usize,
+) -> PResult<BasedAstNode<'a>> {
     let start = RefCell::new(start);
 
     let take = || {
@@ -552,7 +589,11 @@ fn consume_declaration<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut u
 /// This function accepts the position of the first token of the expression
 /// and returns the position of the first token not consumed. This does
 /// not include the semi or ), unless the expression started on a (.
-fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut usize) -> PResult<BasedAstNode<'a>> {
+fn consume_expression<'a>(
+    ctx: &mut Context,
+    tokens: &'a [Token],
+    start: &mut usize,
+) -> PResult<BasedAstNode<'a>> {
     ctx.stack.push("Expresssion".to_string());
     let iter = tokens[*start..].iter().peekable();
 
@@ -582,13 +623,10 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
         }
     }
 
-    fn apply_unary<'a>(
-        op: &BinOperation,
-        expr: BasedAstNode<'a>
-    ) -> BasedAstNode<'a> {
+    fn apply_unary<'a>(op: &BinOperation, expr: BasedAstNode<'a>) -> BasedAstNode<'a> {
         match op {
             BinOperation::Bang => Not(expr).into(),
-            x => panic!("Bang is the only unary operator. Not {:?}", x)
+            x => panic!("Bang is the only unary operator. Not {:?}", x),
         }
     }
 
@@ -599,21 +637,23 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
     ) -> BasedAstNode<'a> {
         match op {
             BinOperation::Bang => panic!("Bang is not a binary operation."),
-            BinOperation::And => BinOp{
+            BinOperation::And => BinOp {
                 op: BinOperation::And,
                 lhs,
                 rhs,
-            }.into(),
-            BinOperation::Or => BinOp{
+            }
+            .into(),
+            BinOperation::Or => BinOp {
                 op: BinOperation::Or,
                 lhs,
                 rhs,
-            }.into(),
-            BinOperation::Call => 
-                FunctionCall {
-                    function: lhs,
-                    args: rhs,
-                }.into(),
+            }
+            .into(),
+            BinOperation::Call => FunctionCall {
+                function: lhs,
+                args: rhs,
+            }
+            .into(),
             BinOperation::Assign => BasedAstNode {
                 inner: Box::new(Assignment { lhs, rhs }),
                 token: None,
@@ -622,7 +662,8 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
                 op: BinOperation::Mult,
                 lhs,
                 rhs,
-            }.into(),
+            }
+            .into(),
             BinOperation::Div => BasedAstNode {
                 inner: Box::new(BinOp {
                     op: BinOperation::Div,
@@ -693,7 +734,9 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
                     exprs.push(expr);
                 }
 
-                if !is_first_token && (!last_token_was_op || ops.last().is_some_and(|x| *x == BinOperation::Call)) {
+                if !is_first_token
+                    && (!last_token_was_op || ops.last().is_some_and(|x| *x == BinOperation::Call))
+                {
                     Some(BinOperation::Call)
                 } else {
                     None
@@ -708,8 +751,9 @@ fn consume_expression<'a>(ctx: &mut Context, tokens: &'a [Token], start: &mut us
                 break;
             }
             TokenType::EqAssign => Some(BinOperation::Assign),
-            TokenType::OpMult => Some(BinOperation::Mult),
             TokenType::OpAdd => Some(BinOperation::Add),
+            TokenType::OpSub => Some(BinOperation::Sub),
+            TokenType::OpMult => Some(BinOperation::Mult),
             TokenType::True => {
                 exprs.push(LiteralBool(true).into());
                 None
@@ -957,7 +1001,7 @@ mod tests {
         };
         assert_eq!(*op, BinOperation::And);
 
-        let BinOp {op, lhs, rhs} = rhs.as_ref() else {
+        let BinOp { op, lhs, rhs } = rhs.as_ref() else {
             panic!();
         };
         assert_eq!(*op, BinOperation::Or);
@@ -966,7 +1010,7 @@ mod tests {
     #[test]
     fn a4_4() {
         let toks = lexing::lex(
-&r#"
+            &r#"
 // {"compiles": true, "stdout": "9\n"}
 
 fn main() {
@@ -980,7 +1024,53 @@ fn main() {
         print(10);
     }
 }
-"#);
-        let _ = parse_file(&toks, |err| {panic!("Parse error: {:?}", err)});
+"#,
+        );
+        let _ = parse_file(&toks, |err| panic!("Parse error: {:?}", err));
+    }
+
+    #[test]
+    fn a5_1() {
+        use AstNode::*;
+        let toks = lexing::lex(
+            &r#"
+{
+	let i = 1;
+	while i < 10 {
+		i = i + 1;
+	}
+}
+"#,
+        );
+
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let ast = consume_block(&mut ctx, &toks, &mut 0).unwrap();
+        dbg!(&ast);
+
+        let Block { stmts } = ast.as_ref() else {
+            panic!();
+        };
+
+        let WhileStmt {
+            begin_blk,
+            condition,
+            body_blk,
+        } = stmts[1].as_ref()
+        else {
+            panic!();
+        };
+        let Block { stmts } = begin_blk.as_ref() else {
+            panic!();
+        };
+        assert_eq!(stmts.len(), 0);
+
+        let BinOp { op, lhs, rhs } = condition.as_ref() else {
+            panic!()
+        };
+
+        let Block { stmts } = body_blk.as_ref() else {
+            panic!()
+        };
     }
 }

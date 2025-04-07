@@ -40,7 +40,6 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
         Setne(rd) => format!("  setne {}\n", render_expr(rd)),
         Andq(a, rd) => format!("  andq {}, {}\n", render_expr(a), render_expr(rd)),
         Orq(a, rd) => format!("  orq {}, {}\n", render_expr(a), render_expr(rd)),
-
     };
     res.extend(bytes.into_bytes());
 }

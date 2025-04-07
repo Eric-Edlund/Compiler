@@ -1,1 +1,6 @@
 /target
+working.s
+broken.s
+out.s
+test_bin
+runtime.o

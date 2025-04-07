@@ -1,4 +1,4 @@
-// {"compiles": true, "stdout": ""}
+// {"compiles": true, "stdout": "10\n"}
 
 fn main() {
 	let i = 1;
@@ -6,8 +6,10 @@ fn main() {
 	while i < 10 {
 		i = i + 1;
 		if result < i {
+			print(100);
 			result = result + 1;
 		} else {
+			print(200);
 			result = result - i;
 		}
 	}

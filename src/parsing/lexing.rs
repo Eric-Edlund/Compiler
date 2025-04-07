@@ -9,6 +9,7 @@ pub enum TokenType {
     Return,
     Fn,
     If,
+    While,
     Else,
     Identifier,
     NumberLit,
@@ -61,6 +62,7 @@ pub fn lex(buf: &dyn AsRef<[u8]>) -> Vec<Token> {
         (TokenType::Return, Regex::new(r"return").unwrap()),
         (TokenType::Fn, Regex::new(r"fn").unwrap()),
         (TokenType::If, Regex::new(r"if").unwrap()),
+        (TokenType::While, Regex::new(r"while").unwrap()),
         (TokenType::Else, Regex::new(r"else").unwrap()),
         (TokenType::Let, Regex::new(r"let").unwrap()),
         (TokenType::And, Regex::new(r"and").unwrap()),
@@ -156,7 +158,7 @@ let x = 7; // Comment
 fn cat() {
     // Comment 2
     return 1 + 9
-} if else
+} if else while
 ");
 
         assert_eq!(tokens[0].ty, TokenType::Let);
@@ -190,5 +192,6 @@ fn cat() {
         assert_eq!(tokens[16].ty, TokenType::RBrace);
         assert_eq!(tokens[17].ty, TokenType::If);
         assert_eq!(tokens[18].ty, TokenType::Else);
+        assert_eq!(tokens[19].ty, TokenType::While);
     }
 }

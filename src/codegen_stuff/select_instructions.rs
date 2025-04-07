@@ -58,9 +58,6 @@ fn si_stmt(
                 panic!("Assignments only should assign to variables.");
             };
 
-            // return [x86.Movq(si_expr(atm1), x86.Reg('rax')),
-            //         x86.Addq(si_expr(atm2), x86.Reg('rax')),
-            //         x86.Movq(x86.Reg('rax'), x86.Var(x))]
             prepare_value.extend([X86Instr::Movq {
                 src: arg,
                 rd: X86Arg::Var(identifier.clone()),
@@ -69,8 +66,9 @@ fn si_stmt(
         }
         FunctionDecl { identifier, body } => {
             assert_eq!(identifier, &"main");
-            // TODO: Labels for different functions
             si_stmt(body, current_block, blocks);
+            // Need to add this so that allocate_registers doesn't flip out
+            blocks.insert("conclusion".to_string(), vec![]);
             blocks
                 .get_mut(current_block)
                 .unwrap()
@@ -139,6 +137,47 @@ fn si_stmt(
                     .unwrap()
                     .push(X86Instr::Jmp(cont_label.clone()));
             }
+
+            *current_block = cont_label.clone();
+            blocks.insert(current_block.clone(), Vec::new());
+        }
+        WhileStmt {
+            begin_blk,
+            condition,
+            body_blk,
+        } => {
+            let (condition_instrs, condition) = si_expr(condition);
+            let begin_label = next_label();
+            let check_label = next_label();
+            let body_label = next_label();
+            let cont_label = next_label();
+            blocks.get_mut(current_block).unwrap().extend([
+                X86Instr::Jmp(begin_label.clone()),
+            ]);
+
+            blocks.insert(begin_label.clone(), vec![]);
+            *current_block = begin_label.clone();
+            si_stmt(begin_blk, current_block, blocks);
+            blocks.get_mut(&begin_label).unwrap().extend([
+                X86Instr::Jmp(check_label.clone()),
+            ]);
+
+            blocks.insert(check_label.clone(), vec![
+                X86Instr::Cmpq{
+                    a: condition,
+                    b: X86Arg::Immed(0)
+                },
+                X86Instr::Je(cont_label.clone()),
+                X86Instr::Jmp(body_label.clone()),
+            ]);
+            *current_block = check_label.clone();
+
+            blocks.insert(body_label.clone(), vec![]);
+            *current_block = body_label.clone();
+            si_stmt(body_blk, current_block, blocks);
+            blocks.get_mut(&body_label).unwrap().extend([
+                X86Instr::Jmp(begin_label.clone()),
+            ]);
 
             *current_block = cont_label.clone();
             blocks.insert(current_block.clone(), Vec::new());

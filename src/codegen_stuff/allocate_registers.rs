@@ -31,7 +31,13 @@ pub fn allocate_registers(program: &mut X86Program) {
     };
     for (label, instrs) in &program.blocks {
         let mut pts = Vec::<ProgramPointMetadata>::with_capacity(instrs.len() + 1);
-        pts.extend(instrs.iter().map(|_| ProgramPointMetadata::default()));
+        pts.extend(
+            instrs
+                .iter()
+                .map(|_| ProgramPointMetadata::default())
+                .chain([ProgramPointMetadata::default()]),
+        );
+        assert!(pts.len() == instrs.len() + 1);
         solution.program_pts.insert(label.to_string(), pts);
     }
 
@@ -114,9 +120,7 @@ impl InterferenceGraph {
     }
 
     pub fn add_node(&mut self, n: String) {
-        if !self.adj_list.contains_key(&n) {
-            self.adj_list.insert(n, HashSet::new());
-        }
+        self.adj_list.entry(n).or_default();
     }
 
     pub fn add<T>(&mut self, lhs: T, rhs: T)
@@ -252,13 +256,15 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
         Movq { src, rd } => as_var(src),
         Retq => vec![],
         Callq { label } => vec![],
-        Je(label) | Jne(label) | Jmp(label) => ctx.program_pts[label.as_str()]
-            .first()
-            .unwrap()
-            .live
-            .iter()
-            .map(|s| s.as_str())
-            .collect(),
+        Je(label) | Jne(label) | Jmp(label) => {
+            let live_before = ctx.program_pts[label.as_str()].first();
+            live_before
+                .unwrap()
+                .live
+                .iter()
+                .map(|s| s.as_str())
+                .collect()
+        }
         Sete(rd) => vec![],
         Setl(rd) => vec![],
         Setle(rd) => vec![],

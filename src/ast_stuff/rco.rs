@@ -101,11 +101,28 @@ fn rco_stmt<'a>(unit: &mut BasedAstNode<'a>, new_stmts: &mut Vec<BasedAstNode<'a
             ref mut else_blk,
         } => {
             let atomic_condition = rco_expr(condition, new_stmts);
+            *condition = atomic_condition;
             rco_stmt(then_blk, new_stmts);
             if let Some(else_blk) = else_blk {
                 rco_stmt(else_blk, new_stmts);
             }
-            *condition = atomic_condition
+        }
+        WhileStmt {
+            ref mut begin_blk,
+            ref mut condition,
+            ref mut body_blk,
+        } => {
+            let Block { stmts: begin_stmts } = begin_blk.deref_mut() else {
+                panic!("AstNode::WhileStmt.begin_blk must always be a AstNode::Block")
+            };
+            assert_eq!(
+                begin_stmts.len(),
+                0,
+                "While begin block cannot be directly defined in the language's syntax."
+            );
+            let atomic_condition = rco_expr(condition, begin_stmts);
+            *condition = atomic_condition;
+            rco_stmt(body_blk, new_stmts);
         }
         _ => panic!("Unimplemented {:?}", *unit.as_ref()),
     }
