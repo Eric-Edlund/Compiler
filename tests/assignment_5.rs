@@ -49,21 +49,17 @@ fn run_artifact(artifact: &Path) -> RunResult {
     }
 }
 
-const A1: &str = include_str!("./assignments/a4/test1.l");
-const A2: &str = include_str!("./assignments/a4/test2.l");
-const A3: &str = include_str!("./assignments/a4/test3.l");
-const A4: &str = include_str!("./assignments/a4/test4.l");
-const A5: &str = include_str!("./assignments/a4/test5.l");
-const A6: &str = include_str!("./assignments/a4/test6.l");
-const A7: &str = include_str!("./assignments/a4/test7.l");
-const A8: &str = include_str!("./assignments/a4/test8.l");
-const A9: &str = include_str!("./assignments/a4/test9.l");
-const A10: &str = include_str!("./assignments/a4/test10.l");
-const A11: &str = include_str!("./assignments/a4/test11.l");
+const TESTS: &[&str] = &[
+    include_str!("./assignments/a5/test1.l"),
+    include_str!("./assignments/a5/test2.l"),
+    include_str!("./assignments/a5/test3.l"),
+    include_str!("./assignments/a5/test4.l"),
+    include_str!("./assignments/a5/test5.l"),
+    include_str!("./assignments/a5/test6.l"),
+];
 
-const TESTS: &[&str] = &[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11];
 #[test]
-fn test_assignment_4_tests() {
+fn test_assignment_5_tests() {
     for (test, i) in TESTS.iter().zip(1..) {
         println!("Building test {}", i);
         let expected_result = read_expectations(test);

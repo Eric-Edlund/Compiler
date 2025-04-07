@@ -1,5 +1,4 @@
 // {"compiles": true, "stdout": "7\n"}
-// z not defined in outer scope
 
 fn main() {
     let x = 5;
