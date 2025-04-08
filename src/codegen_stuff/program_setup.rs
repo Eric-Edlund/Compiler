@@ -19,7 +19,11 @@ pub fn wrap_functions_with_stack_logic(program: &mut X86Program) {
         func.blocks.insert(add_frame_name.clone(), add_frame_blk);
         func.lead_block = add_frame_name.clone();
 
-        func.blocks.insert(format!("{}_stack_teardown", name), vec![
+        let teardown_frame_name = format!("{}_stack_teardown", name);
+        func.blocks.get_mut(&func.tail_block).unwrap().extend([
+            Jmp(teardown_frame_name.clone()),
+        ]);
+        func.blocks.insert(teardown_frame_name, vec![
             Addq(Imm(func.stack_size as u64), Reg("rsp")),
             // rsp -= 8, read it into rbp
             Popq(Reg("rbp")),

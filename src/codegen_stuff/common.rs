@@ -106,6 +106,7 @@ impl X86Instr {
 pub struct X86Function {
     pub name: String,
     pub lead_block: String,
+    pub tail_block: String,
     pub blocks: OrderedHashMap<String, Vec<X86Instr>>,
     pub stack_size: u32,
 }

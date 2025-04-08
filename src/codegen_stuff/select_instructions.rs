@@ -42,40 +42,56 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
         entry_fn: "main".to_string(),
     };
 
-    for (name, body) in functions {
-        let lead_block = next_label();
-        let mut f = X86Function {
-            name: name.clone(),
-            lead_block: lead_block.clone(),
-            blocks: OrderedHashMap::new(),
-            stack_size: 0,
-        };
-
-        f.blocks.insert(lead_block.clone(), Vec::new());
-        let mut current_block = lead_block;
-        for construct in &file.asts {
-            si_stmt(construct, &mut current_block, &mut f.blocks);
-        }
-
-        result.functions.insert(name, f);
+    for construct in &file.asts {
+        let f = si_func_decl(construct);
+        result.functions.insert(f.name.clone(), f);
     }
 
     result
 }
 
+fn si_func_decl(
+    exp: &BasedAstNode,
+) -> X86Function {
+    use AstNode::*;
+    let FunctionDecl { identifier, body } = exp.as_ref() else {
+        panic!("Expecting a function declaration.");
+    };
+    assert_eq!(identifier, &"main");
+
+    let mut blocks = OrderedHashMap::new();
+
+    let this_lead = format!("{}_start", identifier);
+    let this_tail = format!("{}_conclusion", identifier);
+    blocks.insert(this_lead.clone(), vec![]);
+
+    si_stmt(body, &this_lead, &this_tail, &mut blocks);
+
+    blocks.insert(this_tail.clone(), vec![]);
+
+
+    X86Function {
+        name: identifier.to_string(),
+        lead_block: this_lead.clone(),
+        tail_block: this_tail.clone(),
+        blocks,
+        stack_size: 0,
+    }
+}
+
+/// This function is responsible for ensuring that all paths lead back to 
+/// the tail block.
 fn si_stmt(
     exp: &BasedAstNode,
-    current_block: &mut String,
+    current_block: &str,
+    tail_block: &str,
     blocks: &mut OrderedHashMap<String, Vec<X86Instr>>,
 ) {
     use AstNode::*;
     match exp.as_ref() {
         Declaration { identifier, rhs } => {
             let (mut prefix, arg) = si_expr(rhs);
-            prefix.push(X86Instr::Movq(
-                arg,
-                X86Arg::Var(identifier.to_string()),
-            ));
+            prefix.push(X86Instr::Movq(arg, X86Arg::Var(identifier.to_string())));
             blocks.get_mut(current_block).unwrap().extend(prefix);
         }
         Assignment { lhs, rhs } => {
@@ -85,21 +101,8 @@ fn si_stmt(
                 panic!("Assignments only should assign to variables.");
             };
 
-            prepare_value.extend([X86Instr::Movq(
-                arg,
-                X86Arg::Var(identifier.clone()),
-            )]);
+            prepare_value.extend([X86Instr::Movq(arg, X86Arg::Var(identifier.clone()))]);
             blocks.get_mut(current_block).unwrap().extend(prepare_value);
-        }
-        FunctionDecl { identifier, body } => {
-            assert_eq!(identifier, &"main");
-            si_stmt(body, current_block, blocks);
-            // Need to add this so that allocate_registers doesn't flip out
-            blocks.insert("conclusion".to_string(), vec![]);
-            blocks
-                .get_mut(current_block)
-                .unwrap()
-                .push(X86Instr::Jmp("conclusion".to_string()));
         }
         FunctionCall { function, ref args } => {
             let Variable { identifier } = function.as_ref() else {
@@ -110,18 +113,14 @@ fn si_stmt(
             let (prefix, args) = si_expr(args);
 
             blocks.get_mut(current_block).unwrap().extend([
-                X86Instr::Movq(
-                    args,
-                    X86Arg::Reg("rdi"),
-                ),
-                X86Instr::Callq(
-                    "print_int".to_string(),
-                ),
+                X86Instr::Movq(args, X86Arg::Reg("rdi")),
+                X86Instr::Callq("print_int".to_string()),
             ])
         }
         Block { stmts } => {
+            let this_lead = next_label();
             for stmt in stmts {
-                si_stmt(stmt, current_block, blocks);
+                si_stmt(stmt, current_block, tail_block, blocks);
             }
         }
         IfStmt {
@@ -132,7 +131,6 @@ fn si_stmt(
             let (condition_instrs, condition) = si_expr(condition);
             let then_label = next_label();
             let else_label = next_label();
-            let cont_label = next_label();
             assert_ne!(&then_label, &else_label);
             blocks
                 .get_mut(current_block)
@@ -147,26 +145,21 @@ fn si_stmt(
                 X86Instr::Jmp(then_label.clone()),
             ]);
 
-            *current_block = then_label.clone();
-            blocks.insert(current_block.clone(), Vec::new());
-            si_stmt(then_blk, current_block, blocks);
+            blocks.insert(then_label.clone(), Vec::new());
+            si_stmt(then_blk, &then_label, tail_block, blocks);
             blocks
                 .get_mut(current_block)
                 .unwrap()
-                .push(X86Instr::Jmp(cont_label.clone()));
+                .push(X86Instr::Jmp(tail_block.to_string()));
 
             if let Some(else_blk) = else_blk {
-                *current_block = else_label.clone();
-                blocks.insert(current_block.clone(), Vec::new());
-                si_stmt(else_blk, current_block, blocks);
+                blocks.insert(else_label.clone(), Vec::new());
+                si_stmt(else_blk, &else_label, tail_block, blocks);
                 blocks
                     .get_mut(current_block)
                     .unwrap()
-                    .push(X86Instr::Jmp(cont_label.clone()));
+                    .push(X86Instr::Jmp(tail_block.to_string()));
             }
-
-            *current_block = cont_label.clone();
-            blocks.insert(current_block.clone(), Vec::new());
         }
         WhileStmt {
             begin_blk,
@@ -177,15 +170,13 @@ fn si_stmt(
             let begin_label = next_label();
             let check_label = next_label();
             let body_label = next_label();
-            let cont_label = next_label();
             blocks
                 .get_mut(current_block)
                 .unwrap()
                 .extend([X86Instr::Jmp(begin_label.clone())]);
 
             blocks.insert(begin_label.clone(), vec![]);
-            *current_block = begin_label.clone();
-            si_stmt(begin_blk, current_block, blocks);
+            si_stmt(begin_blk, &begin_label, tail_block, blocks);
             blocks
                 .get_mut(&begin_label)
                 .unwrap()
@@ -198,22 +189,17 @@ fn si_stmt(
                         a: condition,
                         b: X86Arg::Imm(0),
                     },
-                    X86Instr::Je(cont_label.clone()),
+                    X86Instr::Je(tail_block.to_string()),
                     X86Instr::Jmp(body_label.clone()),
                 ],
             );
-            *current_block = check_label.clone();
 
             blocks.insert(body_label.clone(), vec![]);
-            *current_block = body_label.clone();
-            si_stmt(body_blk, current_block, blocks);
+            si_stmt(body_blk, &body_label, tail_block, blocks);
             blocks
                 .get_mut(&body_label)
                 .unwrap()
                 .extend([X86Instr::Jmp(begin_label.clone())]);
-
-            *current_block = cont_label.clone();
-            blocks.insert(current_block.clone(), Vec::new());
         }
         x => panic!("Si_statment not implemented for {:?}", x),
     }
@@ -238,15 +224,9 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let (prefix2, res2) = si_expr(rhs);
             let mut instrs = vec![];
             instrs.extend(prefix);
-            instrs.push(X86Instr::Movq(
-                res,
-                tmp.clone(),
-            ));
+            instrs.push(X86Instr::Movq(res, tmp.clone()));
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Addq(
-                res2,
-                tmp.clone(),
-            ));
+            instrs.push(X86Instr::Addq(res2, tmp.clone()));
             (instrs, tmp)
         }
         BinOp {
@@ -259,15 +239,9 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let (prefix2, res2) = si_expr(rhs);
             let mut instrs = vec![];
             instrs.extend(prefix);
-            instrs.push(X86Instr::Movq (
-                res,
-                tmp.clone(),
-            ));
+            instrs.push(X86Instr::Movq(res, tmp.clone()));
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Subq (
-                res2,
-                tmp.clone(),
-            ));
+            instrs.push(X86Instr::Subq(res2, tmp.clone()));
             (instrs, tmp)
         }
         BinOp {
@@ -280,10 +254,7 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let (prefix2, res2) = si_expr(rhs);
             let mut instrs = vec![];
             instrs.extend(prefix);
-            instrs.push(X86Instr::Movq(
-                res,
-                tmp.clone(),
-            ));
+            instrs.push(X86Instr::Movq(res, tmp.clone()));
             instrs.extend(prefix2);
             instrs.push(X86Instr::Imulq {
                 val: res2,
@@ -316,17 +287,11 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
                 GEq => vec![Setge(al.clone()), Movzbq(al.clone(), tmp.clone())],
                 NEq => vec![Setne(al.clone()), Movzbq(al.clone(), tmp.clone())],
                 And => vec![
-                    Movq (
-                        res1.clone(),
-                        tmp.clone(),
-                    ),
+                    Movq(res1.clone(), tmp.clone()),
                     Andq(res2.clone(), tmp.clone()),
                 ],
                 Or => vec![
-                    Movq (
-                        res1.clone(),
-                        tmp.clone(),
-                    ),
+                    Movq(res1.clone(), tmp.clone()),
                     Orq(res2.clone(), tmp.clone()),
                 ],
                 _ => todo!("{:?}", op),

@@ -8,6 +8,7 @@
     clippy::needless_else,
     clippy::useless_format,
     clippy::needless_range_loop,
+    clippy::redundant_field_names,
 )]
 mod ast_stuff;
 mod codegen_stuff;
