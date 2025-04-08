@@ -3,8 +3,10 @@ use crate::codegen_stuff::common::{X86Arg, X86Program};
 use super::common::X86Instr;
 
 pub fn patch_instructions(program: &mut X86Program) {
-    for (label, block) in &mut program.blocks {
-        patch_block(block)
+    for (name, function) in &mut program.functions {
+        for (label, block) in &mut function.blocks {
+            patch_block(block)
+        }
     }
 }
 
@@ -28,17 +30,11 @@ where
     use X86Arg::*;
     use X86Instr::*;
     match instr {
-        Cmpq {
-            a: a_in,
-            b: Immed(i),
-        } => {
-            push(Movq {
-                src: Immed(i),
-                rd: Reg("rax".to_string()),
-            });
+        Cmpq { a: a_in, b: Imm(i) } => {
+            push(Movq(Imm(i), Reg("rax")));
             push(Cmpq {
                 a: a_in.clone(),
-                b: Reg("rax".to_string()),
+                b: Reg("rax"),
             })
         }
         // Cmpq only accepts one memory location
@@ -46,72 +42,54 @@ where
             a: Deref(r1, offset1),
             b: Deref(r2, offset2),
         } => {
-            push(Movq {
-                src: Deref(r1, offset1),
-                rd: Reg("rax".to_string()),
-            });
+            push(Movq(Deref(r1, offset1), Reg("rax")));
             push(Cmpq {
-                a: Reg("rax".to_string()),
+                a: Reg("rax"),
                 b: Deref(r2, offset2),
             });
         }
 
         // Movq only accepts one memory location
-        Movq {
-            src: Deref(r1, offset1),
-            rd: Deref(r2, offset2),
-        } => {
-            push(Movq {
-                src: Deref(r1, offset1),
-                rd: Reg("rax".to_string()),
-            });
-            push(Movq {
-                src: Reg("rax".to_string()),
-                rd: Deref(r2, offset2),
-            });
+        Movq(Deref(r1, offset1), Deref(r2, offset2)) => {
+            push(Movq(Deref(r1, offset1), Reg("rax")));
+            push(Movq(Reg("rax"), Deref(r2, offset2)));
         }
-        Orq(
+        Orq(Deref(r1, offset1), Deref(r2, offset2)) => {
+            push(Movq(
+                Deref(r1, offset1),
+                Reg("rax"),
+            ));
+            push(Orq(Reg("rax"), Deref(r2, offset2)));
+        }
+        Addq (
             Deref(r1, offset1),
             Deref(r2, offset2),
         ) => {
-            push(Movq {
-                src: Deref(r1, offset1),
-                rd: Reg("rax".to_string()),
-            });
-            push(Orq (
-                Reg("rax".to_string()),
+            push(Movq(
+                Deref(r1, offset1),
+                Reg("rax"),
+            ));
+            push(Addq (
+                Reg("rax"),
                 Deref(r2, offset2),
             ));
-        }
-        Addq {
-            val: Deref(r1, offset1),
-            rd: Deref(r2, offset2),
-        } => {
-            push(Movq {
-                src: Deref(r1, offset1),
-                rd: Reg("rax".to_string()),
-            });
-            push(Addq {
-                val: Reg("rax".to_string()),
-                rd: Deref(r2, offset2),
-            });
         }
         // X86 sete expects an 8 bit register. We need to find the 8 bit version
         // of the referenced register.
         Sete(Reg(dest)) => {
-            push(Sete(Reg(lower_8bits(dest).to_string())));
+            push(Sete(Reg(lower_8bits(dest))));
         }
         Setg(Reg(dest)) => {
-            push(Setg(Reg(lower_8bits(dest).to_string())));
+            push(Setg(Reg(lower_8bits(dest))));
         }
         Setl(Reg(dest)) => {
-            push(Setl(Reg(lower_8bits(dest).to_string())));
+            push(Setl(Reg(lower_8bits(dest))));
         }
         Setle(Reg(dest)) => {
-            push(Setle(Reg(lower_8bits(dest).to_string())));
+            push(Setle(Reg(lower_8bits(dest))));
         }
         Setge(Reg(dest)) => {
-            push(Setge(Reg(lower_8bits(dest).to_string())));
+            push(Setge(Reg(lower_8bits(dest))));
         }
         _ => push(instr),
     }
@@ -127,13 +105,24 @@ where
         "rcx" => "cl",
         "rdx" => "dl",
         "rsi" => "sil",
-        "r8" => "r8b",  // intel uses r8b, and amd uses r8l (I'm reading)
+        "r8" => "r8b", // intel uses r8b, and amd uses r8l (I'm reading)
         "r9" => "r9b",
         "r10" => "r10b",
         "r11" => "r11b",
         "r12" => "r12b",
         "r13" => "r13b",
         "r14" => "r14b",
+        "al" => "al",
+        "bl" => "bl",
+        "cl" => "cl",
+        "dl" => "dl",
+        "r8b" => "r8b",
+        "r9b" => "r9b",
+        "r10b" => "r10b",
+        "r11b" => "r11b",
+        "r12b" => "r12b",
+        "r13b" => "r13b",
+        "r14b" => "r14b",
         _ => panic!("Made up register name: {}", reg.as_ref()),
     }
 }

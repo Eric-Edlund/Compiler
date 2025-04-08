@@ -14,7 +14,7 @@ use parsing::build_ast;
 use ast_stuff::explicate_control::explicate_control;
 use ast_stuff::rco::remove_complex_operands;
 use codegen_stuff::allocate_registers::allocate_registers;
-use codegen_stuff::program_setup::prelude_and_conclusion;
+use codegen_stuff::program_setup::{prelude_and_conclusion, wrap_functions_with_stack_logic};
 use codegen_stuff::select_instructions::select_instructions;
 use codegen_stuff::type_checking::type_check;
 use core::str;
@@ -41,6 +41,7 @@ pub fn compile_program(src: &str) -> CompileResult {
     let mut x86_program = select_instructions(&parsed_file);
     allocate_registers(&mut x86_program);
     // if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
+    wrap_functions_with_stack_logic(&mut x86_program);
     prelude_and_conclusion(&mut x86_program);
     patch_instructions(&mut x86_program);
 

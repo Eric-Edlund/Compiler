@@ -1,9 +1,9 @@
-use super::common::{X86Arg, X86Instr, X86Program};
+use super::common::{X86Arg, X86Function, X86Instr, X86Program};
 use core::fmt;
 use std::collections::{HashMap, HashSet};
 
 const AVAILABLE_REGISTERS: &[&str] = &[
-    "rbx", "rcx", "rdx", "rsi", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
+    "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
 ];
 // Does not include rdi because we use that for function calls
 
@@ -26,10 +26,16 @@ struct PartialSolution {
 /// In this pass we remove variables, replacing them with either
 /// registers or stack references.
 pub fn allocate_registers(program: &mut X86Program) {
+    for (name, function) in &mut program.functions {
+        allocate_registers_function(function)
+    }
+}
+
+fn allocate_registers_function(function: &mut X86Function) {
     let mut solution = PartialSolution {
         program_pts: HashMap::new(),
     };
-    for (label, instrs) in &program.blocks {
+    for (label, instrs) in &function.blocks {
         let mut pts = Vec::<ProgramPointMetadata>::with_capacity(instrs.len() + 1);
         pts.extend(
             instrs
@@ -44,23 +50,24 @@ pub fn allocate_registers(program: &mut X86Program) {
     let mut changed = true;
     while changed {
         changed = false;
-        live_set_pass(program, &mut solution, &mut changed);
+        live_set_pass(function, &mut solution, &mut changed);
     }
 
     let mut interference_graph = InterferenceGraph::new();
-    for (label, block) in &program.blocks {
+    for (label, block) in &function.blocks {
         let live_sets: Vec<HashSet<String>> = solution.program_pts[label]
             .iter()
             .map(|pt| pt.live.clone())
             .collect::<Vec<_>>();
         extend_interference_graph(&mut interference_graph, &live_sets);
     }
+
     let coloring = disjoint_coloring(&interference_graph);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
     let variable_homes = assign_homes(&coloring);
     assert_eq!(coloring.len(), variable_homes.len());
 
-    for (label, block) in &mut program.blocks {
+    for (label, block) in &mut function.blocks {
         for instr in block {
             instr.transform_args(|arg| {
                 use X86Arg::*;
@@ -70,15 +77,19 @@ pub fn allocate_registers(program: &mut X86Program) {
             })
         }
     }
+    function.stack_size = variable_homes
+        .values()
+        .filter(|home| matches!(home, X86Arg::Deref(_, _)))
+        .count() as u32;
 }
 
 // Improve the partial solution's approximation of the live after sets.
 fn live_set_pass<'b, 'a: 'b>(
-    program: &'a X86Program,
+    function: &'a X86Function,
     ctx: &mut PartialSolution,
     changed: &mut bool,
 ) {
-    for (label, block) in &program.blocks {
+    for (label, block) in &function.blocks {
         let mut program_pts = ctx.program_pts.get_mut(label).unwrap().clone();
         // program_pts.first_mut().unwrap().live = HashSet::from_iter(["hi".to_string()]);
         for (i, pt) in program_pts.iter_mut().skip(1).enumerate().rev() {
@@ -181,7 +192,7 @@ where
 }
 
 type Color = i32;
-fn disjoint_coloring<'a>(graph: &'a InterferenceGraph) -> HashMap<&'a str, Color> {
+fn disjoint_coloring(graph: &InterferenceGraph) -> HashMap<&str, Color> {
     let mut result = HashMap::<&str, Color>::new();
     // Each node's neighboring colors
     let mut saturation_sets = HashMap::<&str, HashSet<Color>>::new();
@@ -226,7 +237,7 @@ fn assign_homes(coloring: &HashMap<&str, Color>) -> HashMap<String, X86Arg> {
 
     let reg_homes_iter = AVAILABLE_REGISTERS
         .iter()
-        .map(|reg_name| X86Arg::Reg(reg_name.to_string()));
+        .map(|reg_name| X86Arg::Reg(reg_name));
     let stack_homes_iter = (0..).map(|offset| X86Arg::Deref("rbp".to_string(), (offset + 1) * -8));
     let available_homes = reg_homes_iter.chain(stack_homes_iter);
 
@@ -245,17 +256,18 @@ fn as_var(arg: &X86Arg) -> Vec<&str> {
 fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'b str> {
     use X86Instr::*;
     match instr {
-        Addq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
-        Subq { val, rd } => as_var(val).into_iter().chain(as_var(rd)).collect(),
+        Addq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
+        Subq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Imulq { val, b, rd } => as_var(val).into_iter().chain(as_var(b)).collect(),
         Cmpq { a, b } => {
             let mut r = as_var(a);
             r.extend(as_var(b));
             r
         }
-        Movq { src, rd } => as_var(src),
+        Movq(src, rd) => as_var(src),
+        Movzbq(src, rd) => as_var(src),
         Retq => vec![],
-        Callq { label } => vec![],
+        Callq(label) => vec![],
         Je(label) | Jne(label) | Jmp(label) => {
             let live_before = ctx.program_pts[label.as_str()].first();
             live_before
@@ -288,13 +300,14 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
 fn writes_of(instr: &X86Instr) -> Vec<&str> {
     use X86Instr::*;
     match instr {
-        Addq { val, rd } => as_var(rd),
-        Subq { val, rd } => as_var(rd),
+        Addq(val, rd) => as_var(rd),
+        Subq (val, rd) => as_var(rd),
         Imulq { val, b, rd } => as_var(rd),
         Cmpq { .. } => vec![],
-        Movq { src, rd } => as_var(rd),
+        Movq(src, rd) => as_var(rd),
+        Movzbq(src, rd) => as_var(rd),
         Retq => vec![],
-        Callq { label } => vec![],
+        Callq(label) => vec![],
         Je { .. } => vec![],
         Jne { .. } => vec![],
         Sete(rd) => as_var(rd),

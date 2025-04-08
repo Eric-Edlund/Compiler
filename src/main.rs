@@ -7,6 +7,7 @@
     unused_variables,
     clippy::needless_else,
     clippy::useless_format,
+    clippy::needless_range_loop,
 )]
 mod ast_stuff;
 mod codegen_stuff;
@@ -17,7 +18,7 @@ use clap::Parser;
 use codegen_stuff::allocate_registers::allocate_registers;
 use codegen_stuff::assembly::{self, render};
 use codegen_stuff::patch_instructions::patch_instructions;
-use codegen_stuff::program_setup::prelude_and_conclusion;
+use codegen_stuff::program_setup::{prelude_and_conclusion, wrap_functions_with_stack_logic};
 use codegen_stuff::select_instructions::select_instructions;
 use codegen_stuff::type_checking::type_check;
 use core::str;
@@ -63,6 +64,7 @@ async fn main() {
     let mut x86_program = select_instructions(&parsed_file);
     if_debug(format!("Select Instructions:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     allocate_registers(&mut x86_program);
+    wrap_functions_with_stack_logic(&mut x86_program);
     if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     prelude_and_conclusion(&mut x86_program);
 

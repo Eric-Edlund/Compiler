@@ -1,8 +1,10 @@
 use crate::codegen_stuff::common::X86Arg;
+use crate::codegen_stuff::common::X86Function;
 use crate::parsing::parsing::BasedAstNode;
 use crate::parsing::parsing::BinOperation;
 use crate::parsing::{parsing::AstNode, FileAnal};
 use ordered_hash_map::ordered_map::OrderedHashMap;
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use super::common::{X86Instr, X86Program};
@@ -22,15 +24,40 @@ fn next_label() -> String {
 }
 
 pub fn select_instructions(file: &FileAnal) -> X86Program {
+    let functions: HashMap<String, BasedAstNode> = file
+        .asts
+        .iter()
+        .map(|node| {
+            let AstNode::FunctionDecl { identifier, body } = node.as_ref() else {
+                panic!("All file top level structures are function declarations.");
+            };
+            (identifier.to_string(), body.clone())
+        })
+        .collect();
+
+    assert!(functions.contains_key("main"));
+
     let mut result = X86Program {
-        blocks: OrderedHashMap::new(),
-        required_stack_size: 1024,
+        functions: HashMap::new(),
+        entry_fn: "main".to_string(),
     };
 
-    result.blocks.insert("start".to_string(), Vec::new());
-    let mut current_block = "start".to_string();
-    for construct in &file.asts {
-        si_stmt(construct, &mut current_block, &mut result.blocks);
+    for (name, body) in functions {
+        let lead_block = next_label();
+        let mut f = X86Function {
+            name: name.clone(),
+            lead_block: lead_block.clone(),
+            blocks: OrderedHashMap::new(),
+            stack_size: 0,
+        };
+
+        f.blocks.insert(lead_block.clone(), Vec::new());
+        let mut current_block = lead_block;
+        for construct in &file.asts {
+            si_stmt(construct, &mut current_block, &mut f.blocks);
+        }
+
+        result.functions.insert(name, f);
     }
 
     result
@@ -45,10 +72,10 @@ fn si_stmt(
     match exp.as_ref() {
         Declaration { identifier, rhs } => {
             let (mut prefix, arg) = si_expr(rhs);
-            prefix.push(X86Instr::Movq {
-                src: arg,
-                rd: X86Arg::Var(identifier.to_string()),
-            });
+            prefix.push(X86Instr::Movq(
+                arg,
+                X86Arg::Var(identifier.to_string()),
+            ));
             blocks.get_mut(current_block).unwrap().extend(prefix);
         }
         Assignment { lhs, rhs } => {
@@ -58,10 +85,10 @@ fn si_stmt(
                 panic!("Assignments only should assign to variables.");
             };
 
-            prepare_value.extend([X86Instr::Movq {
-                src: arg,
-                rd: X86Arg::Var(identifier.clone()),
-            }]);
+            prepare_value.extend([X86Instr::Movq(
+                arg,
+                X86Arg::Var(identifier.clone()),
+            )]);
             blocks.get_mut(current_block).unwrap().extend(prepare_value);
         }
         FunctionDecl { identifier, body } => {
@@ -83,13 +110,13 @@ fn si_stmt(
             let (prefix, args) = si_expr(args);
 
             blocks.get_mut(current_block).unwrap().extend([
-                X86Instr::Movq {
-                    src: args,
-                    rd: X86Arg::Reg("rdi".to_string()),
-                },
-                X86Instr::Callq {
-                    label: "print_int".to_string(),
-                },
+                X86Instr::Movq(
+                    args,
+                    X86Arg::Reg("rdi"),
+                ),
+                X86Instr::Callq(
+                    "print_int".to_string(),
+                ),
             ])
         }
         Block { stmts } => {
@@ -114,7 +141,7 @@ fn si_stmt(
             blocks.get_mut(current_block).unwrap().extend([
                 X86Instr::Cmpq {
                     a: condition,
-                    b: X86Arg::Immed(0),
+                    b: X86Arg::Imm(0),
                 },
                 X86Instr::Je(else_label.clone()),
                 X86Instr::Jmp(then_label.clone()),
@@ -151,33 +178,39 @@ fn si_stmt(
             let check_label = next_label();
             let body_label = next_label();
             let cont_label = next_label();
-            blocks.get_mut(current_block).unwrap().extend([
-                X86Instr::Jmp(begin_label.clone()),
-            ]);
+            blocks
+                .get_mut(current_block)
+                .unwrap()
+                .extend([X86Instr::Jmp(begin_label.clone())]);
 
             blocks.insert(begin_label.clone(), vec![]);
             *current_block = begin_label.clone();
             si_stmt(begin_blk, current_block, blocks);
-            blocks.get_mut(&begin_label).unwrap().extend([
-                X86Instr::Jmp(check_label.clone()),
-            ]);
+            blocks
+                .get_mut(&begin_label)
+                .unwrap()
+                .extend([X86Instr::Jmp(check_label.clone())]);
 
-            blocks.insert(check_label.clone(), vec![
-                X86Instr::Cmpq{
-                    a: condition,
-                    b: X86Arg::Immed(0)
-                },
-                X86Instr::Je(cont_label.clone()),
-                X86Instr::Jmp(body_label.clone()),
-            ]);
+            blocks.insert(
+                check_label.clone(),
+                vec![
+                    X86Instr::Cmpq {
+                        a: condition,
+                        b: X86Arg::Imm(0),
+                    },
+                    X86Instr::Je(cont_label.clone()),
+                    X86Instr::Jmp(body_label.clone()),
+                ],
+            );
             *current_block = check_label.clone();
 
             blocks.insert(body_label.clone(), vec![]);
             *current_block = body_label.clone();
             si_stmt(body_blk, current_block, blocks);
-            blocks.get_mut(&body_label).unwrap().extend([
-                X86Instr::Jmp(begin_label.clone()),
-            ]);
+            blocks
+                .get_mut(&body_label)
+                .unwrap()
+                .extend([X86Instr::Jmp(begin_label.clone())]);
 
             *current_block = cont_label.clone();
             blocks.insert(current_block.clone(), Vec::new());
@@ -192,8 +225,8 @@ fn si_stmt(
 fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
     use AstNode::*;
     match exp.as_ref() {
-        LiteralNumber(val) => (vec![], X86Arg::Immed(*val as u64)),
-        LiteralBool(val) => (vec![], X86Arg::Immed(*val as u64)),
+        LiteralNumber(val) => (vec![], X86Arg::Imm(*val as u64)),
+        LiteralBool(val) => (vec![], X86Arg::Imm(*val as u64)),
         Variable { identifier } => (vec![], X86Arg::Var(identifier.clone())),
         BinOp {
             op: BinOperation::Add,
@@ -205,15 +238,15 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let (prefix2, res2) = si_expr(rhs);
             let mut instrs = vec![];
             instrs.extend(prefix);
-            instrs.push(X86Instr::Movq {
-                src: res,
-                rd: tmp.clone(),
-            });
+            instrs.push(X86Instr::Movq(
+                res,
+                tmp.clone(),
+            ));
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Addq {
-                val: res2,
-                rd: tmp.clone(),
-            });
+            instrs.push(X86Instr::Addq(
+                res2,
+                tmp.clone(),
+            ));
             (instrs, tmp)
         }
         BinOp {
@@ -226,15 +259,15 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let (prefix2, res2) = si_expr(rhs);
             let mut instrs = vec![];
             instrs.extend(prefix);
-            instrs.push(X86Instr::Movq {
-                src: res,
-                rd: tmp.clone(),
-            });
+            instrs.push(X86Instr::Movq (
+                res,
+                tmp.clone(),
+            ));
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Subq {
-                val: res2,
-                rd: tmp.clone(),
-            });
+            instrs.push(X86Instr::Subq (
+                res2,
+                tmp.clone(),
+            ));
             (instrs, tmp)
         }
         BinOp {
@@ -247,10 +280,10 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let (prefix2, res2) = si_expr(rhs);
             let mut instrs = vec![];
             instrs.extend(prefix);
-            instrs.push(X86Instr::Movq {
-                src: res,
-                rd: tmp.clone(),
-            });
+            instrs.push(X86Instr::Movq(
+                res,
+                tmp.clone(),
+            ));
             instrs.extend(prefix2);
             instrs.push(X86Instr::Imulq {
                 val: res2,
@@ -272,26 +305,28 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             use BinOperation::*;
             use X86Instr::*;
             let tmp = X86Arg::Var(new_var_name());
+            let al = X86Arg::Reg("al");
+            let rax = X86Arg::Reg("rax");
 
             instrs.extend(match op {
-                Eq => vec![Sete(tmp.clone())],
-                Lt => vec![Setl(tmp.clone())],
-                LEq => vec![Setle(tmp.clone())],
-                Gt => vec![Setg(tmp.clone())],
-                GEq => vec![Setge(tmp.clone())],
-                NEq => vec![Setne(tmp.clone())],
+                Eq => vec![Sete(al.clone()), Movzbq(al.clone(), tmp.clone())],
+                Lt => vec![Setl(al.clone()), Movzbq(al.clone(), tmp.clone())],
+                LEq => vec![Setle(al.clone()), Movzbq(al.clone(), tmp.clone())],
+                Gt => vec![Setg(al.clone()), Movzbq(al.clone(), tmp.clone())],
+                GEq => vec![Setge(al.clone()), Movzbq(al.clone(), tmp.clone())],
+                NEq => vec![Setne(al.clone()), Movzbq(al.clone(), tmp.clone())],
                 And => vec![
-                    Movq {
-                        src: res1.clone(),
-                        rd: tmp.clone(),
-                    },
+                    Movq (
+                        res1.clone(),
+                        tmp.clone(),
+                    ),
                     Andq(res2.clone(), tmp.clone()),
                 ],
                 Or => vec![
-                    Movq {
-                        src: res1.clone(),
-                        rd: tmp.clone(),
-                    },
+                    Movq (
+                        res1.clone(),
+                        tmp.clone(),
+                    ),
                     Orq(res2.clone(), tmp.clone()),
                 ],
                 _ => todo!("{:?}", op),

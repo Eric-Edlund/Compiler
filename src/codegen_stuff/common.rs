@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use ordered_hash_map::OrderedHashMap;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum X86Arg {
-    Reg(String),
-    Immed(u64),
+    Reg(&'static str),
+    Imm(u64),
     Label(String),
     Deref(String, i32),
     // Pseudo assembly
@@ -12,13 +14,15 @@ pub enum X86Arg {
 
 #[derive(Debug)]
 pub enum X86Instr {
-    Movq { src: X86Arg, rd: X86Arg },
-    Addq { val: X86Arg, rd: X86Arg },
-    Subq { val: X86Arg, rd: X86Arg },
+    /// Destination register is always last
+    Movq(X86Arg, X86Arg),
+    Movzbq(X86Arg, X86Arg),
+    Addq(X86Arg, X86Arg),
+    Subq(X86Arg, X86Arg),
     Imulq { val: X86Arg, b: X86Arg, rd: X86Arg },
-    Callq { label: String },
-    Pushq { rd: X86Arg },
-    Popq { rd: X86Arg },
+    Callq(String),
+    Pushq(X86Arg),
+    Popq(X86Arg),
     Cmpq { a: X86Arg, b: X86Arg },
     Retq,
     Je(String),
@@ -39,15 +43,19 @@ impl X86Instr {
         use X86Instr::*;
         match self {
             Retq | Callq { .. } => {}
-            Movq { src, rd } => {
+            Movq(src, rd) => {
                 transform(src);
                 transform(rd);
             }
-            Addq { val, rd } => {
+            Movzbq(from, to) => {
+                transform(from);
+                transform(to);
+            }
+            Addq(val, rd) => {
                 transform(val);
                 transform(rd);
             }
-            Subq { val, rd } => {
+            Subq (val, rd ) => {
                 transform(val);
                 transform(rd);
             }
@@ -95,7 +103,15 @@ impl X86Instr {
 }
 
 #[derive(Debug)]
-pub struct X86Program {
+pub struct X86Function {
+    pub name: String,
+    pub lead_block: String,
     pub blocks: OrderedHashMap<String, Vec<X86Instr>>,
-    pub required_stack_size: u32,
+    pub stack_size: u32,
+}
+
+#[derive(Debug)]
+pub struct X86Program {
+    pub functions: HashMap<String, X86Function>,
+    pub entry_fn: String,
 }
