@@ -24,9 +24,9 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
     let bytes = match instr {
         Addq(val, rd) => format!("  addq {}, {}\n", render_expr(val), render_expr(rd)),
         Subq(val, rd) => format!("  subq {}, {}\n", render_expr(val), render_expr(rd)),
-        Imulq { val, b, rd } => format!(
+        Imulq(a, b, rd) => format!(
             "  imulq {}, {}, {}\n",
-            render_expr(val),
+            render_expr(a),
             render_expr(b),
             render_expr(rd)
         ),
@@ -35,7 +35,7 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
         Callq(label) => format!("  callq {}\n", label),
         Pushq(rd) => format!("  pushq {}\n", render_expr(rd)),
         Popq(rd) => format!("  popq {}\n", render_expr(rd)),
-        Cmpq { a, b } => format!("  cmpq {}, {}\n", render_expr(a), render_expr(b)),
+        Cmpq(a, b) => format!("  cmpq {}, {}\n", render_expr(a), render_expr(b)),
         Retq => "  retq\n".to_string(),
         Je(to) => format!("  je {}\n", to),
         Jne(to) => format!("  jne {}\n", to),

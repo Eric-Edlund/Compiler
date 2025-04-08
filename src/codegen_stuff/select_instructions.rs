@@ -50,9 +50,7 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
     }
 }
 
-fn si_func_decl(
-    exp: &BasedAstNode,
-) -> X86Function {
+fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     use AstNode::*;
     let FunctionDecl { identifier, body } = exp.as_ref() else {
         panic!("Expecting a function declaration.");
@@ -69,7 +67,6 @@ fn si_func_decl(
 
     blocks.insert(this_tail.clone(), vec![]);
 
-
     X86Function {
         name: identifier.to_string(),
         lead_block: this_lead.clone(),
@@ -79,7 +76,7 @@ fn si_func_decl(
     }
 }
 
-/// This function is responsible for ensuring that all paths lead back to 
+/// This function is responsible for ensuring that all paths lead back to
 /// the tail block.
 fn si_stmt(
     exp: &BasedAstNode,
@@ -137,10 +134,7 @@ fn si_stmt(
                 .unwrap()
                 .extend(condition_instrs);
             blocks.get_mut(current_block).unwrap().extend([
-                X86Instr::Cmpq {
-                    a: condition,
-                    b: X86Arg::Imm(0),
-                },
+                X86Instr::Cmpq(condition, X86Arg::Imm(0)),
                 X86Instr::Je(else_label.clone()),
                 X86Instr::Jmp(then_label.clone()),
             ]);
@@ -185,10 +179,7 @@ fn si_stmt(
             blocks.insert(
                 check_label.clone(),
                 vec![
-                    X86Instr::Cmpq {
-                        a: condition,
-                        b: X86Arg::Imm(0),
-                    },
+                    X86Instr::Cmpq(condition, X86Arg::Imm(0)),
                     X86Instr::Je(tail_block.to_string()),
                     X86Instr::Jmp(body_label.clone()),
                 ],
@@ -256,11 +247,7 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             instrs.extend(prefix);
             instrs.push(X86Instr::Movq(res, tmp.clone()));
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Imulq {
-                val: res2,
-                b: tmp.clone(),
-                rd: tmp.clone(),
-            });
+            instrs.push(X86Instr::Imulq(res2, tmp.clone(), tmp.clone()));
             (instrs, tmp)
         }
         BinOp { op, lhs, rhs } => {
@@ -269,10 +256,7 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let mut instrs = vec![];
             instrs.extend(prefix);
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Cmpq {
-                a: res2.clone(),
-                b: res1.clone(),
-            });
+            instrs.push(X86Instr::Cmpq(res2.clone(), res1.clone()));
             use BinOperation::*;
             use X86Instr::*;
             let tmp = X86Arg::Var(new_var_name());

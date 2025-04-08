@@ -30,23 +30,14 @@ where
     use X86Arg::*;
     use X86Instr::*;
     match instr {
-        Cmpq { a: a_in, b: Imm(i) } => {
+        Cmpq(a_in, Imm(i)) => {
             push(Movq(Imm(i), Reg("rax")));
-            push(Cmpq {
-                a: a_in.clone(),
-                b: Reg("rax"),
-            })
+            push(Cmpq(a_in.clone(), Reg("rax")));
         }
         // Cmpq only accepts one memory location
-        Cmpq {
-            a: Deref(r1, offset1),
-            b: Deref(r2, offset2),
-        } => {
+        Cmpq(Deref(r1, offset1), Deref(r2, offset2)) => {
             push(Movq(Deref(r1, offset1), Reg("rax")));
-            push(Cmpq {
-                a: Reg("rax"),
-                b: Deref(r2, offset2),
-            });
+            push(Cmpq(Reg("rax"), Deref(r2, offset2)));
         }
 
         // Movq only accepts one memory location

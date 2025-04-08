@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
 use ordered_hash_map::OrderedHashMap;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum X86Arg {
@@ -19,11 +18,11 @@ pub enum X86Instr {
     Movzbq(X86Arg, X86Arg),
     Addq(X86Arg, X86Arg),
     Subq(X86Arg, X86Arg),
-    Imulq { val: X86Arg, b: X86Arg, rd: X86Arg },
+    Imulq(X86Arg, X86Arg, X86Arg),
     Callq(String),
     Pushq(X86Arg),
     Popq(X86Arg),
-    Cmpq { a: X86Arg, b: X86Arg },
+    Cmpq(X86Arg, X86Arg),
     Retq,
     Je(String),
     Jne(String),
@@ -55,16 +54,16 @@ impl X86Instr {
                 transform(val);
                 transform(rd);
             }
-            Subq (val, rd ) => {
+            Subq(val, rd) => {
                 transform(val);
                 transform(rd);
             }
-            Imulq { val, b, rd } => {
-                transform(val);
+            Imulq (a, b, rd) => {
+                transform(a);
                 transform(b);
                 transform(rd);
             }
-            Cmpq { a, b } => {
+            Cmpq (a, b) => {
                 transform(a);
                 transform(b);
             }
@@ -123,12 +122,12 @@ impl X86Function {
     /// Adds the block to the end of the program replacing the tail block.
     /// Mutates the existing tail to jump to the added block.
     pub fn suffix_block_mut(&mut self, block: (String, Vec<X86Instr>)) {
-        self.blocks.get_mut(&self.tail_block).unwrap().extend([
-            X86Instr::Jmp(block.0.clone()),
-        ]);
+        self.blocks
+            .get_mut(&self.tail_block)
+            .unwrap()
+            .extend([X86Instr::Jmp(block.0.clone())]);
         self.tail_block = block.0.clone();
         self.blocks.insert(block.0, block.1);
-
     }
 }
 

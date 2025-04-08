@@ -263,8 +263,8 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
     match instr {
         Addq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Subq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
-        Imulq { val, b, rd } => as_var(val).into_iter().chain(as_var(b)).collect(),
-        Cmpq { a, b } => {
+        Imulq(val, b, rd) => as_var(val).into_iter().chain(as_var(b)).collect(),
+        Cmpq(a, b) => {
             let mut r = as_var(a);
             r.extend(as_var(b));
             r
@@ -307,7 +307,7 @@ fn writes_of(instr: &X86Instr) -> Vec<&str> {
     match instr {
         Addq(val, rd) => as_var(rd),
         Subq (val, rd) => as_var(rd),
-        Imulq { val, b, rd } => as_var(rd),
+        Imulq (a, b, rd ) => as_var(rd),
         Cmpq { .. } => vec![],
         Movq(src, rd) => as_var(rd),
         Movzbq(src, rd) => as_var(rd),
