@@ -7,7 +7,7 @@ pub enum X86Arg {
     Reg(&'static str),
     Imm(u64),
     Label(String),
-    Deref(String, i32),
+    Deref(&'static str, i32),
     // Pseudo assembly
     Var(String),
 }
@@ -109,6 +109,27 @@ pub struct X86Function {
     pub tail_block: String,
     pub blocks: OrderedHashMap<String, Vec<X86Instr>>,
     pub stack_size: u32,
+}
+
+impl X86Function {
+    /// Adds the block to the program in place of the lead_block,
+    /// mutates the added block to jump to the previous lead block.
+    pub fn prefix_block_mut(&mut self, mut block: (String, Vec<X86Instr>)) {
+        block.1.push(X86Instr::Jmp(self.lead_block.clone()));
+        self.lead_block = block.0.clone();
+        self.blocks.insert(block.0, block.1);
+    }
+
+    /// Adds the block to the end of the program replacing the tail block.
+    /// Mutates the existing tail to jump to the added block.
+    pub fn suffix_block_mut(&mut self, block: (String, Vec<X86Instr>)) {
+        self.blocks.get_mut(&self.tail_block).unwrap().extend([
+            X86Instr::Jmp(block.0.clone()),
+        ]);
+        self.tail_block = block.0.clone();
+        self.blocks.insert(block.0, block.1);
+
+    }
 }
 
 #[derive(Debug)]

@@ -37,17 +37,17 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
 
     assert!(functions.contains_key("main"));
 
-    let mut result = X86Program {
-        functions: HashMap::new(),
-        entry_fn: "main".to_string(),
-    };
+    let mut functions = HashMap::new();
 
     for construct in &file.asts {
         let f = si_func_decl(construct);
-        result.functions.insert(f.name.clone(), f);
+        functions.insert(f.name.clone(), f);
     }
 
-    result
+    X86Program {
+        functions,
+        entry_fn: "main".to_string(),
+    }
 }
 
 fn si_func_decl(

@@ -55,24 +55,12 @@ where
             push(Movq(Reg("rax"), Deref(r2, offset2)));
         }
         Orq(Deref(r1, offset1), Deref(r2, offset2)) => {
-            push(Movq(
-                Deref(r1, offset1),
-                Reg("rax"),
-            ));
+            push(Movq(Deref(r1, offset1), Reg("rax")));
             push(Orq(Reg("rax"), Deref(r2, offset2)));
         }
-        Addq (
-            Deref(r1, offset1),
-            Deref(r2, offset2),
-        ) => {
-            push(Movq(
-                Deref(r1, offset1),
-                Reg("rax"),
-            ));
-            push(Addq (
-                Reg("rax"),
-                Deref(r2, offset2),
-            ));
+        Addq(Deref(r1, offset1), Deref(r2, offset2)) => {
+            push(Movq(Deref(r1, offset1), Reg("rax")));
+            push(Addq(Reg("rax"), Deref(r2, offset2)));
         }
         // X86 sete expects an 8 bit register. We need to find the 8 bit version
         // of the referenced register.
@@ -90,6 +78,11 @@ where
         }
         Setge(Reg(dest)) => {
             push(Setge(Reg(lower_8bits(dest))));
+        }
+        // Movzbq can't move into a deref
+        Movzbq(Reg(src), Deref(reg, offset)) => {
+            push(Movzbq(Reg(lower_8bits(src)), Reg("rax")));
+            push(Movq(Reg("rax"), Deref(reg, offset)));
         }
         _ => push(instr),
     }

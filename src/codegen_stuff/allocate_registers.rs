@@ -81,6 +81,11 @@ fn allocate_registers_function(function: &mut X86Function) {
         .values()
         .filter(|home| matches!(home, X86Arg::Deref(_, _)))
         .count() as u32;
+    function.stack_size *= 8;
+    if function.stack_size % 16 == 1 {
+        function.stack_size += 8;
+    }
+    function.stack_size += 16// TODO: Why is this necessary?
 }
 
 // Improve the partial solution's approximation of the live after sets.
@@ -238,7 +243,7 @@ fn assign_homes(coloring: &HashMap<&str, Color>) -> HashMap<String, X86Arg> {
     let reg_homes_iter = AVAILABLE_REGISTERS
         .iter()
         .map(|reg_name| X86Arg::Reg(reg_name));
-    let stack_homes_iter = (0..).map(|offset| X86Arg::Deref("rbp".to_string(), (offset + 1) * -8));
+    let stack_homes_iter = (0..).map(|offset| X86Arg::Deref("rbp", (offset + 1) * -8));
     let available_homes = reg_homes_iter.chain(stack_homes_iter);
 
     HashMap::from_iter(vars.into_iter().map(|x| x.to_string()).zip(available_homes))

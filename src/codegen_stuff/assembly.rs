@@ -5,7 +5,8 @@ use X86Instr::*;
 pub fn render(program: &X86Program) -> Vec<u8> {
     let mut res = Vec::<u8>::new();
 
-    res.extend(format!("  .globl {}\n", program.entry_fn).bytes());
+    let entry_fn = &program.functions[&program.entry_fn];
+    res.extend(format!("  .globl {}\n", entry_fn.lead_block).bytes());
 
     for (name, function) in &program.functions {
         for (label, instrs) in &function.blocks {
