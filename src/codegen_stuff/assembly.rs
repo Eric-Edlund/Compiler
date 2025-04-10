@@ -30,6 +30,8 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
             render_expr(b),
             render_expr(rd)
         ),
+        Xorq(a, rd) => format!("  xorq {}, {}\n", render_expr(a), render_expr(rd)),
+        Notq(rd) => format!("  notq {}\n", render_expr(rd)),
         Movq(src, rd) => format!("  movq {}, {}\n", render_expr(src), render_expr(rd)),
         Movzbq(src, rd) => format!("  movzbq {}, {}\n", render_expr(src), render_expr(rd)),
         Callq(label) => format!("  callq {}\n", label),

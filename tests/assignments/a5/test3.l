@@ -1,4 +1,4 @@
-// {"compiles": true, "stdout": "10\n"}
+// {"compiles": true, "stdout": "100\n100\n100\n100\n100\n100\n100\n100\n100\n10\n"}
 
 fn main() {
 	let i = 1;

@@ -143,7 +143,7 @@ fn rco_expr<'a>(
             new_stmts.push(
                 Assignment {
                     lhs: tmp.clone(),
-                    rhs: expr,
+                    rhs: Not(expr).into(),
                 }
                 .into(),
             );
@@ -152,7 +152,7 @@ fn rco_expr<'a>(
         BinOp { lhs, rhs, op } => {
             use BinOperation::*;
             match op {
-                Bang => panic!("Why is bang iun a binary operation?"),
+                Bang => panic!("Why is bang in a binary operation?"),
                 Eq | LEq | GEq | Gt | Lt | NEq | Add | Sub | Mult | Div | Call | And | Or => {
                     let lhs = rco_expr(lhs, new_stmts);
                     let rhs = rco_expr(rhs, new_stmts);

@@ -26,7 +26,7 @@ pub fn wrap_functions_with_stack_logic(program: &mut X86Program) {
                 Addq(Imm(func.stack_size as u64), Reg("rsp")),
                 // rsp -= 8, read it into rbp
                 Popq(Reg("rbp")),
-                // rsp += 8, read that value into %rsp, jump back (somewhere)??? TODO
+                // rsp += 8, read that value into %rsp, jump back to previous frame
                 Retq,
             ],
         ));
@@ -40,21 +40,21 @@ pub fn prelude_and_conclusion(program: &mut X86Program) {
         "main".to_string(),
         vec![
             // For some reason the registers start with initial junk values.
-            Movq(Imm(0), Reg("rsi")),
-            Movq(Imm(0), Reg("rdi")),
-            Movq(Imm(0), Reg("rax")),
-            Movq(Imm(0), Reg("rbx")),
-            Movq(Imm(0), Reg("rcx")),
-            Movq(Imm(0), Reg("rdx")),
-            Movq(Imm(0), Reg("r8")),
-            Movq(Imm(0), Reg("r9")),
-            Movq(Imm(0), Reg("r10")),
-            Movq(Imm(0), Reg("r11")),
-            Movq(Imm(0), Reg("r12")),
-            Movq(Imm(0), Reg("r13")),
-            Movq(Imm(0), Reg("r14")),
-            Movq(Imm(0), Reg("r15")),
-            Jmp(entry_fn.lead_block.clone()),
+            // Movq(Imm(0), Reg("rsi")),
+            // Movq(Imm(0), Reg("rdi")),
+            // Movq(Imm(0), Reg("rax")),
+            // Movq(Imm(0), Reg("rbx")),
+            // Movq(Imm(0), Reg("rcx")),
+            // Movq(Imm(0), Reg("rdx")),
+            // Movq(Imm(0), Reg("r8")),
+            // Movq(Imm(0), Reg("r9")),
+            // Movq(Imm(0), Reg("r10")),
+            // Movq(Imm(0), Reg("r11")),
+            // Movq(Imm(0), Reg("r12")),
+            // Movq(Imm(0), Reg("r13")),
+            // Movq(Imm(0), Reg("r14")),
+            // Movq(Imm(0), Reg("r15")),
+            // Jmp(entry_fn.lead_block.clone()),
         ],
     ));
 }

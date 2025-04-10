@@ -63,7 +63,12 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     let this_tail = format!("{}_conclusion", identifier);
     blocks.insert(this_lead.clone(), vec![]);
 
-    si_stmt(body, &this_lead, &this_tail, &mut blocks);
+    let mut curr = this_lead.clone();
+    si_stmt(body, &mut curr, &this_tail, &mut blocks);
+
+    blocks.get_mut(&curr).unwrap().extend([
+        X86Instr::Jmp(this_tail.clone()),
+    ]);
 
     blocks.insert(this_tail.clone(), vec![]);
 
@@ -80,7 +85,7 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
 /// the tail block.
 fn si_stmt(
     exp: &BasedAstNode,
-    current_block: &str,
+    current_block: &mut String,
     tail_block: &str,
     blocks: &mut OrderedHashMap<String, Vec<X86Instr>>,
 ) {
@@ -128,6 +133,7 @@ fn si_stmt(
             let (condition_instrs, condition) = si_expr(condition);
             let then_label = next_label();
             let else_label = next_label();
+            let cont_label = next_label();
             assert_ne!(&then_label, &else_label);
             blocks
                 .get_mut(current_block)
@@ -139,21 +145,26 @@ fn si_stmt(
                 X86Instr::Jmp(then_label.clone()),
             ]);
 
+            *current_block = then_label.clone();
             blocks.insert(then_label.clone(), Vec::new());
-            si_stmt(then_blk, &then_label, tail_block, blocks);
+            si_stmt(then_blk, current_block, tail_block, blocks);
             blocks
-                .get_mut(current_block)
+                .get_mut(&then_label)
                 .unwrap()
-                .push(X86Instr::Jmp(tail_block.to_string()));
+                .push(X86Instr::Jmp(cont_label.clone()));
 
             if let Some(else_blk) = else_blk {
                 blocks.insert(else_label.clone(), Vec::new());
-                si_stmt(else_blk, &else_label, tail_block, blocks);
+                *current_block = else_label.clone();
+                si_stmt(else_blk, current_block, tail_block, blocks);
                 blocks
-                    .get_mut(current_block)
+                    .get_mut(&else_label)
                     .unwrap()
-                    .push(X86Instr::Jmp(tail_block.to_string()));
+                    .push(X86Instr::Jmp(cont_label.clone()));
             }
+
+            blocks.insert(cont_label.clone(), Vec::new());
+            *current_block = cont_label.clone();
         }
         WhileStmt {
             begin_blk,
@@ -164,13 +175,15 @@ fn si_stmt(
             let begin_label = next_label();
             let check_label = next_label();
             let body_label = next_label();
+            let cont_label = next_label();
             blocks
                 .get_mut(current_block)
                 .unwrap()
                 .extend([X86Instr::Jmp(begin_label.clone())]);
 
             blocks.insert(begin_label.clone(), vec![]);
-            si_stmt(begin_blk, &begin_label, tail_block, blocks);
+            *current_block = begin_label.clone();
+            si_stmt(begin_blk, current_block, tail_block, blocks);
             blocks
                 .get_mut(&begin_label)
                 .unwrap()
@@ -180,17 +193,21 @@ fn si_stmt(
                 check_label.clone(),
                 vec![
                     X86Instr::Cmpq(condition, X86Arg::Imm(0)),
-                    X86Instr::Je(tail_block.to_string()),
+                    X86Instr::Je(cont_label.clone()),
                     X86Instr::Jmp(body_label.clone()),
                 ],
             );
 
             blocks.insert(body_label.clone(), vec![]);
-            si_stmt(body_blk, &body_label, tail_block, blocks);
+            *current_block = body_label.clone();
+            si_stmt(body_blk, current_block, tail_block, blocks);
             blocks
                 .get_mut(&body_label)
                 .unwrap()
                 .extend([X86Instr::Jmp(begin_label.clone())]);
+
+            blocks.insert(cont_label.clone(), Vec::new());
+            *current_block = cont_label.clone();
         }
         x => panic!("Si_statment not implemented for {:?}", x),
     }
@@ -205,6 +222,13 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
         LiteralNumber(val) => (vec![], X86Arg::Imm(*val as u64)),
         LiteralBool(val) => (vec![], X86Arg::Imm(*val as u64)),
         Variable { identifier } => (vec![], X86Arg::Var(identifier.clone())),
+        Not(val) => {
+            let mut instrs = vec![];
+            let (prefix, val) = si_expr(val);
+            instrs.extend(prefix);
+            instrs.extend([X86Instr::Xorq(X86Arg::Imm(1), val.clone())]);
+            (instrs, val.clone())
+        }
         BinOp {
             op: BinOperation::Add,
             lhs,

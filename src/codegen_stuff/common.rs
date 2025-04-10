@@ -16,9 +16,11 @@ pub enum X86Instr {
     /// Destination register is always last
     Movq(X86Arg, X86Arg),
     Movzbq(X86Arg, X86Arg),
+    Xorq(X86Arg, X86Arg),
     Addq(X86Arg, X86Arg),
     Subq(X86Arg, X86Arg),
     Imulq(X86Arg, X86Arg, X86Arg),
+    Notq(X86Arg),
     Callq(String),
     Pushq(X86Arg),
     Popq(X86Arg),
@@ -61,6 +63,13 @@ impl X86Instr {
             Imulq (a, b, rd) => {
                 transform(a);
                 transform(b);
+                transform(rd);
+            }
+            Xorq(a, rd) => {
+                transform(a);
+                transform(rd);
+            }
+            Notq(rd) => {
                 transform(rd);
             }
             Cmpq (a, b) => {

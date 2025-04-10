@@ -1,8 +1,8 @@
-use std::path::Path;
 use compiler::compile_program;
-use std::process::Command;
 use serde::Deserialize;
 use serde_json::from_str;
+use std::path::Path;
+use std::process::Command;
 
 #[derive(Deserialize)]
 struct TestExpectedResult {
@@ -50,16 +50,10 @@ fn run_artifact(artifact: &Path) -> RunResult {
 }
 
 const TESTS: &[&str] = &[
-    include_str!("./assignments/a5/test1.l"),
-    include_str!("./assignments/a5/test2.l"),
-    include_str!("./assignments/a5/test3.l"),
-    include_str!("./assignments/a5/test4.l"),
-    include_str!("./assignments/a5/test5.l"),
-    include_str!("./assignments/a5/test6.l"),
+    include_str!("./assignments/additional/not.l"),
 ];
-
 #[test]
-fn test_assignment_5_tests() {
+fn test_assignment_4_tests() {
     for (test, i) in TESTS.iter().zip(1..) {
         println!("Building test {}", i);
         let expected_result = read_expectations(test);

@@ -271,6 +271,8 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
         }
         Movq(src, rd) => as_var(src),
         Movzbq(src, rd) => as_var(src),
+        Notq(rd) => as_var(rd),
+        Xorq(a, rd) => as_var(rd).into_iter().chain(as_var(a)).collect(),
         Retq => vec![],
         Callq(label) => vec![],
         Je(label) | Jne(label) | Jmp(label) => {
@@ -311,6 +313,8 @@ fn writes_of(instr: &X86Instr) -> Vec<&str> {
         Cmpq { .. } => vec![],
         Movq(src, rd) => as_var(rd),
         Movzbq(src, rd) => as_var(rd),
+        Notq(rd) => as_var(rd),
+        Xorq(a, rd) => as_var(rd),
         Retq => vec![],
         Callq(label) => vec![],
         Je { .. } => vec![],
