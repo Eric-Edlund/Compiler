@@ -1,4 +1,4 @@
-// {"compiles": true, "stdout": "1\n1\n10\n"}
+// {"compiles": true, "stdout": "1\n82\n"}
 
 fn main() {
 	let i = 1;
@@ -7,7 +7,6 @@ fn main() {
 
 	while i < 10 {
 		i = i + 1;
-		print(result);
 
 		let j = 1;
 		while j < 10 {

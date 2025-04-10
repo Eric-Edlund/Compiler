@@ -26,7 +26,12 @@ pub mod codegen_stuff;
 
 type CompileResult = Result<Vec<u8>, Vec<String>>;
 
-pub fn compile_program(src: &str) -> CompileResult {
+#[derive(Debug)]
+pub struct CompilationConfig {
+    pub no_registers: bool
+}
+
+pub fn compile_program(src: &str, config: &CompilationConfig) -> CompileResult {
     let mut syntax_err = false;
     let mut parsed_file = build_ast(src, |_| {syntax_err = true;});
     if syntax_err {
@@ -39,7 +44,7 @@ pub fn compile_program(src: &str) -> CompileResult {
     explicate_control(&mut parsed_file);
 
     let mut x86_program = select_instructions(&parsed_file);
-    allocate_registers(&mut x86_program);
+    allocate_registers(&mut x86_program, config.no_registers);
     // if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     wrap_functions_with_stack_logic(&mut x86_program);
     prelude_and_conclusion(&mut x86_program);

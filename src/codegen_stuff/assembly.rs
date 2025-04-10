@@ -22,12 +22,12 @@ pub fn render(program: &X86Program) -> Vec<u8> {
 
 fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
     let bytes = match instr {
+        Comment(comment) => format!("  # {}\n", comment),
         Addq(val, rd) => format!("  addq {}, {}\n", render_expr(val), render_expr(rd)),
         Subq(val, rd) => format!("  subq {}, {}\n", render_expr(val), render_expr(rd)),
-        Imulq(a, b, rd) => format!(
-            "  imulq {}, {}, {}\n",
+        Imulq(a, rd) => format!(
+            "  imulq {}, {}\n",
             render_expr(a),
-            render_expr(b),
             render_expr(rd)
         ),
         Xorq(a, rd) => format!("  xorq {}, {}\n", render_expr(a), render_expr(rd)),

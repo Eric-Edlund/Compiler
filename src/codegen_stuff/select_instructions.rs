@@ -185,15 +185,20 @@ fn si_stmt(
             *current_block = begin_label.clone();
             si_stmt(begin_blk, current_block, tail_block, blocks);
             blocks
-                .get_mut(&begin_label)
+                .get_mut(current_block)
                 .unwrap()
-                .extend([X86Instr::Jmp(check_label.clone())]);
+                .extend([
+                    X86Instr::Comment("proceed to while check".to_string()),
+                    X86Instr::Jmp(check_label.clone()),
+                ]);
 
             blocks.insert(
                 check_label.clone(),
                 vec![
                     X86Instr::Cmpq(condition, X86Arg::Imm(0)),
+                    X86Instr::Comment("Break while loop".to_string()),
                     X86Instr::Je(cont_label.clone()),
+                    X86Instr::Comment("To while body".to_string()),
                     X86Instr::Jmp(body_label.clone()),
                 ],
             );
@@ -202,9 +207,12 @@ fn si_stmt(
             *current_block = body_label.clone();
             si_stmt(body_blk, current_block, tail_block, blocks);
             blocks
-                .get_mut(&body_label)
+                .get_mut(current_block)
                 .unwrap()
-                .extend([X86Instr::Jmp(begin_label.clone())]);
+                .extend([
+                    X86Instr::Comment("To while begin".to_string()),
+                    X86Instr::Jmp(begin_label.clone()),
+                ]);
 
             blocks.insert(cont_label.clone(), Vec::new());
             *current_block = cont_label.clone();
@@ -271,7 +279,7 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             instrs.extend(prefix);
             instrs.push(X86Instr::Movq(res, tmp.clone()));
             instrs.extend(prefix2);
-            instrs.push(X86Instr::Imulq(res2, tmp.clone(), tmp.clone()));
+            instrs.push(X86Instr::Imulq(res2, tmp.clone()));
             (instrs, tmp)
         }
         BinOp { op, lhs, rhs } => {

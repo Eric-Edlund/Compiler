@@ -1,21 +1,21 @@
-use compiler::compile_program;
+use compiler::{compile_program, CompilationConfig};
 use serde::Deserialize;
 use serde_json::from_str;
 use std::path::Path;
 use std::process::Command;
 
 #[derive(Deserialize)]
-struct TestExpectedResult {
+pub struct TestExpectedResult {
     pub compiles: bool,
     pub stdout: Option<String>,
 }
 
-fn read_expectations(src_text: &str) -> TestExpectedResult {
+pub fn read_expectations(src_text: &str) -> TestExpectedResult {
     let json_src = &src_text[3..src_text.find('\n').unwrap()];
     from_str::<TestExpectedResult>(json_src).unwrap()
 }
 
-fn link_runtime(prgm_assembly: &Path) {
+pub fn link_runtime(prgm_assembly: &Path) {
     let mut link_cmd = Command::new("gcc");
     link_cmd.args([
         "-g",
@@ -37,11 +37,11 @@ fn link_runtime(prgm_assembly: &Path) {
     chmod.output().expect("Failed to chmod +x the file");
 }
 
-struct RunResult {
-    stdout: String,
+pub struct RunResult {
+    pub stdout: String,
 }
 
-fn run_artifact(artifact: &Path) -> RunResult {
+pub fn run_artifact(artifact: &Path) -> RunResult {
     let mut run_cmd = Command::new(artifact);
     let r = run_cmd.output().expect("Unable to run artifact.");
     RunResult {
@@ -49,25 +49,43 @@ fn run_artifact(artifact: &Path) -> RunResult {
     }
 }
 
-const TESTS: &[&str] = &[
-    include_str!("./assignments/additional/not.l"),
+pub const COMPILATION_CONFIGS: &[CompilationConfig] = &[
+    CompilationConfig {
+        no_registers: false,
+    },
+    CompilationConfig { no_registers: true },
 ];
-#[test]
-fn test_assignment_4_tests() {
-    for (test, i) in TESTS.iter().zip(1..) {
-        println!("Building test {}", i);
+
+pub fn test_files(tests: &[&str]) {
+    for (test, i) in tests.iter().zip(1..) {
+        println!("Testing program {}", i);
         let expected_result = read_expectations(test);
 
-        let c_res = compile_program(test);
+        // Compile with all config combos
+        let mut incorrect_failures: Vec<&CompilationConfig> = vec![];
+        for config in COMPILATION_CONFIGS {
+            let res = compile_program(test, config);
+            if res.is_err() && expected_result.compiles {
+                incorrect_failures.push(config)
+            }
+        }
+
+        if !incorrect_failures.is_empty() {
+            println!(
+                "Failed to compile under the following configurations: {:?}",
+                incorrect_failures
+            );
+            panic!();
+        }
+
+        let c_res = compile_program(test, &COMPILATION_CONFIGS[0]);
         if expected_result.compiles && c_res.is_err() {
             panic!(
                 "Program fails to compile but should succeed. Compile errors: {:?}",
                 c_res.err().unwrap()
             )
         }
-        // else if !expected_result.compiles&& c_res.is_ok() {
-        //     panic!("Program compiles but should fail to compile.");
-        // }
+
         let Ok(program_bytes) = c_res else { continue };
         std::fs::write("out.s", program_bytes).expect("Failed to write program file.");
 

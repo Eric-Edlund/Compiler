@@ -13,13 +13,14 @@ pub enum X86Arg {
 
 #[derive(Debug)]
 pub enum X86Instr {
+    Comment(String),
     /// Destination register is always last
     Movq(X86Arg, X86Arg),
     Movzbq(X86Arg, X86Arg),
     Xorq(X86Arg, X86Arg),
     Addq(X86Arg, X86Arg),
     Subq(X86Arg, X86Arg),
-    Imulq(X86Arg, X86Arg, X86Arg),
+    Imulq(X86Arg, X86Arg),
     Notq(X86Arg),
     Callq(String),
     Pushq(X86Arg),
@@ -60,9 +61,8 @@ impl X86Instr {
                 transform(val);
                 transform(rd);
             }
-            Imulq (a, b, rd) => {
+            Imulq (a, rd) => {
                 transform(a);
-                transform(b);
                 transform(rd);
             }
             Xorq(a, rd) => {
@@ -105,6 +105,7 @@ impl X86Instr {
                 transform(a);
                 transform(rd);
             }
+            Comment(_) => {},
             x => todo!("{:?}", x),
         }
     }

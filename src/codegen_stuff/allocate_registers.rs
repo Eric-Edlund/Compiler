@@ -2,10 +2,16 @@ use super::common::{X86Arg, X86Function, X86Instr, X86Program};
 use core::fmt;
 use std::collections::{HashMap, HashSet};
 
-const AVAILABLE_REGISTERS: &[&str] = &[
-    "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
+const GENERAL_PURPOSE_REGISTERS: &[&str] = &[
+    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
 ];
-// Does not include rdi because we use that for function calls
+const CALLER_SAVED_REGISTERS: &[&str] = &[
+    "rax", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"
+];
+const CALLEE_SAVED_REGISTERS: &[&str] = &[
+    "rbx", "r12", "r13", "r14"
+];
+// Notice that r15 is not available here, it's for the gc stack base pointer.
 
 #[derive(Default, Clone, Debug)]
 struct ProgramPointMetadata {
@@ -25,13 +31,13 @@ struct PartialSolution {
 /// The program is currently in pseudo x86 because it has variables.
 /// In this pass we remove variables, replacing them with either
 /// registers or stack references.
-pub fn allocate_registers(program: &mut X86Program) {
+pub fn allocate_registers(program: &mut X86Program, no_registers: bool) {
     for (name, function) in &mut program.functions {
-        allocate_registers_function(function)
+        allocate_registers_function(function, no_registers)
     }
 }
 
-fn allocate_registers_function(function: &mut X86Function) {
+fn allocate_registers_function(function: &mut X86Function, no_registers: bool) {
     let mut solution = PartialSolution {
         program_pts: HashMap::new(),
     };
@@ -64,7 +70,7 @@ fn allocate_registers_function(function: &mut X86Function) {
 
     let coloring = disjoint_coloring(&interference_graph);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
-    let variable_homes = assign_homes(&coloring);
+    let variable_homes = assign_homes(&coloring, no_registers);
     assert_eq!(coloring.len(), variable_homes.len());
 
     for (label, block) in &mut function.blocks {
@@ -232,7 +238,7 @@ fn disjoint_coloring(graph: &InterferenceGraph) -> HashMap<&str, Color> {
     result
 }
 
-fn assign_homes(coloring: &HashMap<&str, Color>) -> HashMap<String, X86Arg> {
+fn assign_homes(coloring: &HashMap<&str, Color>, no_registers: bool) -> HashMap<String, X86Arg> {
     let mut vars: Vec<(Color, &str)> = coloring
         .iter()
         .map(|(name, color)| (*color, *name))
@@ -240,8 +246,9 @@ fn assign_homes(coloring: &HashMap<&str, Color>) -> HashMap<String, X86Arg> {
     vars.sort_by_key(|x| x.0);
     let vars: Vec<&str> = vars.into_iter().map(|x| x.1).collect();
 
-    let reg_homes_iter = AVAILABLE_REGISTERS
+    let reg_homes_iter = CALLEE_SAVED_REGISTERS
         .iter()
+        .skip_while(|_| no_registers)
         .map(|reg_name| X86Arg::Reg(reg_name));
     let stack_homes_iter = (0..).map(|offset| X86Arg::Deref("rbp", (offset + 1) * -8));
     let available_homes = reg_homes_iter.chain(stack_homes_iter);
@@ -261,9 +268,10 @@ fn as_var(arg: &X86Arg) -> Vec<&str> {
 fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'b str> {
     use X86Instr::*;
     match instr {
+        Comment(..) => vec![],
         Addq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Subq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
-        Imulq(val, b, rd) => as_var(val).into_iter().chain(as_var(b)).collect(),
+        Imulq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Cmpq(a, b) => {
             let mut r = as_var(a);
             r.extend(as_var(b));
@@ -307,9 +315,10 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
 fn writes_of(instr: &X86Instr) -> Vec<&str> {
     use X86Instr::*;
     match instr {
+        Comment(..) => vec![],
         Addq(val, rd) => as_var(rd),
         Subq (val, rd) => as_var(rd),
-        Imulq (a, b, rd ) => as_var(rd),
+        Imulq (a, rd ) => as_var(rd),
         Cmpq { .. } => vec![],
         Movq(src, rd) => as_var(rd),
         Movzbq(src, rd) => as_var(rd),
