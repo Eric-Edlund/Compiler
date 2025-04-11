@@ -1,5 +1,6 @@
 use crate::codegen_stuff::x86::X86Arg;
 use crate::codegen_stuff::x86::X86Function;
+use crate::codegen_stuff::x86::CALLER_SAVED_REGISTERS;
 use crate::parsing::parsing::BasedAstNode;
 use crate::parsing::parsing::BinOperation;
 use crate::parsing::{parsing::AstNode, FileAnal};
@@ -66,9 +67,10 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     let mut curr = this_lead.clone();
     si_stmt(body, &mut curr, &mut blocks);
 
-    blocks.get_mut(&curr).unwrap().extend([
-        X86Instr::Jmp(this_tail.clone()),
-    ]);
+    blocks
+        .get_mut(&curr)
+        .unwrap()
+        .extend([X86Instr::Jmp(this_tail.clone())]);
 
     blocks.insert(this_tail.clone(), vec![]);
 
@@ -113,10 +115,21 @@ fn si_stmt(
 
             let (prefix, args) = si_expr(args);
 
-            blocks.get_mut(current_block).unwrap().extend([
-                X86Instr::Movq(args, X86Arg::Reg("rdi")),
-                X86Instr::Callq("print_int".to_string()),
-            ])
+            blocks.get_mut(current_block).unwrap().extend(
+                CALLER_SAVED_REGISTERS
+                    .iter()
+                    .map(|reg| X86Instr::Pushq(X86Arg::Reg(reg)))
+                    .chain([
+                        X86Instr::Movq(args, X86Arg::Reg("rdi")),
+                        X86Instr::Callq("print_int".to_string()),
+                    ])
+                    .chain(
+                        CALLER_SAVED_REGISTERS
+                            .iter()
+                            .rev()
+                            .map(|reg| X86Instr::Popq(X86Arg::Reg(reg))),
+                    ),
+            )
         }
         Block { stmts } => {
             let this_lead = next_label();
@@ -183,13 +196,10 @@ fn si_stmt(
             blocks.insert(begin_label.clone(), vec![]);
             *current_block = begin_label.clone();
             si_stmt(begin_blk, current_block, blocks);
-            blocks
-                .get_mut(current_block)
-                .unwrap()
-                .extend([
-                    X86Instr::Comment("proceed to while check".to_string()),
-                    X86Instr::Jmp(check_label.clone()),
-                ]);
+            blocks.get_mut(current_block).unwrap().extend([
+                X86Instr::Comment("proceed to while check".to_string()),
+                X86Instr::Jmp(check_label.clone()),
+            ]);
 
             blocks.insert(
                 check_label.clone(),
@@ -205,13 +215,10 @@ fn si_stmt(
             blocks.insert(body_label.clone(), vec![]);
             *current_block = body_label.clone();
             si_stmt(body_blk, current_block, blocks);
-            blocks
-                .get_mut(current_block)
-                .unwrap()
-                .extend([
-                    X86Instr::Comment("To while begin".to_string()),
-                    X86Instr::Jmp(begin_label.clone()),
-                ]);
+            blocks.get_mut(current_block).unwrap().extend([
+                X86Instr::Comment("To while begin".to_string()),
+                X86Instr::Jmp(begin_label.clone()),
+            ]);
 
             blocks.insert(cont_label.clone(), Vec::new());
             *current_block = cont_label.clone();

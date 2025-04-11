@@ -1,6 +1,17 @@
 use ordered_hash_map::OrderedHashMap;
 use std::collections::HashMap;
 
+pub const GENERAL_PURPOSE_REGISTERS: &[&str] = &[
+    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
+];
+pub const CALLER_SAVED_REGISTERS: &[&str] = &[
+    "rax", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"
+];
+pub const CALLEE_SAVED_REGISTERS: &[&str] = &[
+    "rbx", "r12", "r13", "r14"
+];
+// Notice that r15 is not available here, it's for the gc stack base pointer.
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum X86Arg {
     Reg(&'static str),
@@ -45,6 +56,12 @@ impl X86Instr {
         use X86Instr::*;
         match self {
             Retq | Callq { .. } => {}
+            Pushq(reg) => {
+                transform(reg);
+            }
+            Popq(deref) => {
+                transform(deref);
+            }
             Movq(src, rd) => {
                 transform(src);
                 transform(rd);

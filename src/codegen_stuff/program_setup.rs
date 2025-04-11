@@ -33,6 +33,7 @@ pub fn wrap_functions_with_stack_logic(program: &mut X86Program) {
     }
 }
 
+/// This function creates the main block. The program must not already contain one.
 pub fn prelude_and_conclusion(program: &mut X86Program) {
     let entry_fn = program.functions.get_mut(&program.entry_fn).unwrap();
 

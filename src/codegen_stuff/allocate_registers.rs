@@ -1,17 +1,7 @@
-use super::x86::{X86Arg, X86Function, X86Instr, X86Program};
+use super::x86::{X86Arg, X86Function, X86Instr, X86Program, CALLEE_SAVED_REGISTERS};
 use core::fmt;
 use std::collections::{HashMap, HashSet};
 
-const GENERAL_PURPOSE_REGISTERS: &[&str] = &[
-    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
-];
-const CALLER_SAVED_REGISTERS: &[&str] = &[
-    "rax", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"
-];
-const CALLEE_SAVED_REGISTERS: &[&str] = &[
-    "rbx", "r12", "r13", "r14"
-];
-// Notice that r15 is not available here, it's for the gc stack base pointer.
 
 #[derive(Default, Clone, Debug)]
 struct ProgramPointMetadata {
@@ -271,6 +261,8 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
         Addq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Subq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
         Imulq(val, rd) => as_var(val).into_iter().chain(as_var(rd)).collect(),
+        Pushq(reg) => as_var(reg),
+        Popq(deref) => vec![],
         Cmpq(a, b) => {
             let mut r = as_var(a);
             r.extend(as_var(b));
@@ -315,6 +307,8 @@ fn writes_of(instr: &X86Instr) -> Vec<&str> {
     use X86Instr::*;
     match instr {
         Comment(..) => vec![],
+        Pushq(reg) => vec![],
+        Popq(deref) => as_var(deref),
         Addq(val, rd) => as_var(rd),
         Subq (val, rd) => as_var(rd),
         Imulq (a, rd ) => as_var(rd),
