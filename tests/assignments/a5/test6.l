@@ -1,4 +1,4 @@
-// {"compiles": true, "stdout": ""}
+// {"compiles": true, "stdout": "44\n"}
 
 fn main() {
 	let sum = 0;

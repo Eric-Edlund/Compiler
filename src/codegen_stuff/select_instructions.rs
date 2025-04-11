@@ -149,7 +149,7 @@ fn si_stmt(
             blocks.insert(then_label.clone(), Vec::new());
             si_stmt(then_blk, current_block, tail_block, blocks);
             blocks
-                .get_mut(&then_label)
+                .get_mut(current_block)
                 .unwrap()
                 .push(X86Instr::Jmp(cont_label.clone()));
 
@@ -158,7 +158,7 @@ fn si_stmt(
                 *current_block = else_label.clone();
                 si_stmt(else_blk, current_block, tail_block, blocks);
                 blocks
-                    .get_mut(&else_label)
+                    .get_mut(current_block)
                     .unwrap()
                     .push(X86Instr::Jmp(cont_label.clone()));
             }

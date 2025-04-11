@@ -78,7 +78,7 @@ fn allocate_registers_function(function: &mut X86Function, no_registers: bool) {
             instr.transform_args(|arg| {
                 use X86Arg::*;
                 if let Var(name) = arg {
-                    *arg = variable_homes[name].clone();
+                    *arg = variable_homes.get(name).unwrap_or_else(|| panic!("Missing key: {}", &name)).clone();
                 }
             })
         }

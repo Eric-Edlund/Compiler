@@ -1,9 +1,10 @@
-// {"compiles": true, "stdout": ""}
+// {"compiles": true, "stdout": "120\n"}
 
 fn main() {
 	let x = 5;
+	let factorial = 0;
 	if x < 10 {
-		i = 1;
+		let i = 1;
 		factorial = 1;
 		while i <= 5 {
 			factorial = factorial * i;
