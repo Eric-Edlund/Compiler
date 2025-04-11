@@ -193,8 +193,7 @@ where
         let last = set.len() - 1;
         while first < last {
             let a = vars[first];
-            for i in first + 1..=last {
-                let b = vars[i];
+            for b in &vars[first+1..=last] {
                 graph.add(a, b);
             }
             first += 1;

@@ -139,7 +139,7 @@ fn check_expr<'a>(
         }
         FunctionCall { function, args } => {
             let Type::Callable(args, res) = check_expr(function, scope)? else {
-                return Err(format!("Can only call values of type Callable."));
+                return Err("Can only call values of type Callable.".to_string());
             };
             return Ok(*res);
         }
@@ -179,7 +179,7 @@ fn check_unaryop<'a>(
         Bang => {
             let expr_t = check_expr(expr, scope)?;
             if expr_t != Type::Bool {
-                return Err(format!("! can only be applied to booleans."))
+                return Err("! can only be applied to booleans.".to_string())
             }
             return Ok(Type::Bool)
         }
@@ -202,7 +202,7 @@ fn check_binop<'a>(
             let rhs_t = check_expr(rhs, scope)?;
 
             if lhs_t != Type::Bool || rhs_t != Type::Bool {
-                return Err(format!("'and' and 'or' keywords only work with bool arguments."));
+                return Err("'and' and 'or' keywords only work with bool arguments.".to_string());
             }
 
             return Ok(Type::Bool)

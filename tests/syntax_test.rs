@@ -94,12 +94,12 @@ fn parse_2() {
         panic!("{:?}", stmts[0].as_ref());
     };
 
-    let BinOp { op, lhs, rhs } = condition.as_ref() else {
+    let BinOp { op, lhs, rhs: _rhs } = condition.as_ref() else {
         panic!();
     };
     assert_eq!(*op, BinOperation::Eq);
 
-    let BinOp {op: opleft, lhs, rhs} = lhs.as_ref() else {
+    let BinOp {op: opleft, lhs: _lhs, rhs: _rhs} = lhs.as_ref() else {
         panic!();
     };
     assert_eq!(*opleft, BinOperation::Add);
@@ -110,11 +110,11 @@ fn parse_2() {
 
     assert_eq!(stmts.len(), 1);
 
-    let FunctionCall { function, args } = stmts[0].as_ref() else {
+    let FunctionCall {..} = stmts[0].as_ref() else {
         panic!();
     };
 
-    let Block {stmts} = else_blk.as_ref().unwrap().as_ref() else {
+    let Block {..} = else_blk.as_ref().unwrap().as_ref() else {
         panic!();
     };
 }

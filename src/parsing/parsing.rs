@@ -123,7 +123,7 @@ impl AstNode<'_> {
             Self::FunctionCall { function, args } => {
                 f.write_str(&format!("{:?}({:?})", function, args))
             }
-            Self::Variable { identifier } => f.write_str(&format!("{}", identifier)),
+            Self::Variable { identifier } => f.write_str(identifier),
             Self::CommaList { elements } => f.write_str(&format!("{:?}", elements)),
             Self::IfStmt {
                 condition,

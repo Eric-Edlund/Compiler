@@ -64,7 +64,7 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     blocks.insert(this_lead.clone(), vec![]);
 
     let mut curr = this_lead.clone();
-    si_stmt(body, &mut curr, &this_tail, &mut blocks);
+    si_stmt(body, &mut curr, &mut blocks);
 
     blocks.get_mut(&curr).unwrap().extend([
         X86Instr::Jmp(this_tail.clone()),
@@ -86,7 +86,6 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
 fn si_stmt(
     exp: &BasedAstNode,
     current_block: &mut String,
-    tail_block: &str,
     blocks: &mut OrderedHashMap<String, Vec<X86Instr>>,
 ) {
     use AstNode::*;
@@ -122,7 +121,7 @@ fn si_stmt(
         Block { stmts } => {
             let this_lead = next_label();
             for stmt in stmts {
-                si_stmt(stmt, current_block, tail_block, blocks);
+                si_stmt(stmt, current_block, blocks);
             }
         }
         IfStmt {
@@ -147,7 +146,7 @@ fn si_stmt(
 
             *current_block = then_label.clone();
             blocks.insert(then_label.clone(), Vec::new());
-            si_stmt(then_blk, current_block, tail_block, blocks);
+            si_stmt(then_blk, current_block, blocks);
             blocks
                 .get_mut(current_block)
                 .unwrap()
@@ -156,7 +155,7 @@ fn si_stmt(
             if let Some(else_blk) = else_blk {
                 blocks.insert(else_label.clone(), Vec::new());
                 *current_block = else_label.clone();
-                si_stmt(else_blk, current_block, tail_block, blocks);
+                si_stmt(else_blk, current_block, blocks);
                 blocks
                     .get_mut(current_block)
                     .unwrap()
@@ -183,7 +182,7 @@ fn si_stmt(
 
             blocks.insert(begin_label.clone(), vec![]);
             *current_block = begin_label.clone();
-            si_stmt(begin_blk, current_block, tail_block, blocks);
+            si_stmt(begin_blk, current_block, blocks);
             blocks
                 .get_mut(current_block)
                 .unwrap()
@@ -205,7 +204,7 @@ fn si_stmt(
 
             blocks.insert(body_label.clone(), vec![]);
             *current_block = body_label.clone();
-            si_stmt(body_blk, current_block, tail_block, blocks);
+            si_stmt(body_blk, current_block, blocks);
             blocks
                 .get_mut(current_block)
                 .unwrap()
