@@ -15,7 +15,13 @@ pub fn read_expectations(src_text: &str) -> TestExpectedResult {
     from_str::<TestExpectedResult>(json_src).unwrap()
 }
 
-pub fn link_runtime(prgm_assembly: &Path) {
+#[derive(Debug)]
+pub enum LinkResult {
+    LinkerFailure,
+    ChmodFailed,
+}
+
+pub fn link_runtime(prgm_assembly: &Path) -> Result<(), LinkResult> {
     let mut link_cmd = Command::new("gcc");
     link_cmd.args([
         "-g",
@@ -25,16 +31,24 @@ pub fn link_runtime(prgm_assembly: &Path) {
         "test_bin",
     ]);
     let out = link_cmd.output().unwrap();
-    assert_eq!(
-        out.status.code().unwrap(),
-        0,
-        "Failed to link \n\n{}",
-        String::from_utf8(out.stderr).unwrap()
-    );
+    if out.status.code().unwrap() != 0 {
+        println!(
+            "Failed to link \n\n{}",
+            String::from_utf8(out.stderr).unwrap()
+        );
+        return Err(LinkResult::LinkerFailure);
+    }
 
     let mut chmod = Command::new("chmod");
     chmod.args(["+x", "test_bin"]);
-    chmod.output().expect("Failed to chmod +x the file");
+    match chmod.output() {
+        Ok(..) => {}
+        Err(..) => {
+            println!("Failed to chmod +x the file");
+            return Err(LinkResult::ChmodFailed);
+        }
+    }
+    Ok(())
 }
 
 pub struct RunResult {
@@ -58,19 +72,25 @@ pub const COMPILATION_CONFIGS: &[CompilationConfig] = &[
 
 pub fn test_files(tests: &[&str]) {
     for (test, i) in tests.iter().zip(1..) {
-        println!("Testing program {}", i);
+        print!("\r\x1b[2kTesting program {}...", i);
         let expected_result = read_expectations(test);
 
         // Compile with all config combos
         let mut incorrect_failures: Vec<&CompilationConfig> = vec![];
         for config in COMPILATION_CONFIGS {
-            let res = compile_program(test, config);
-            if res.is_err() && expected_result.compiles {
+            let comp_res = compile_program(test, config);
+            let Ok(ref text) = comp_res else {
+                panic!();
+            };
+            std::fs::write("out.s", text).expect("Failed to write program file.");
+            let link_res = link_runtime(Path::new("out.s"));
+            if (comp_res.is_err() || link_res.is_err()) && expected_result.compiles {
                 incorrect_failures.push(config)
             }
         }
 
         if !incorrect_failures.is_empty() {
+            println!();
             println!(
                 "Failed to compile under the following configurations: {:?}",
                 incorrect_failures
@@ -86,10 +106,18 @@ pub fn test_files(tests: &[&str]) {
             )
         }
 
-        let Ok(program_bytes) = c_res else { continue };
+        if !expected_result.compiles {
+            continue;
+        }
+
+        let Ok(program_bytes) = c_res else {
+            panic!("Failed to compile test program {}", i);
+        };
         std::fs::write("out.s", program_bytes).expect("Failed to write program file.");
 
-        link_runtime(Path::new("out.s"));
+        let Ok(..) = link_runtime(Path::new("out.s")) else {
+            panic!("Failed to liink runtime")
+        };
 
         let res = run_artifact(Path::new("./test_bin"));
         if let Some(e_stdout) = expected_result.stdout {

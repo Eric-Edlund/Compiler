@@ -28,7 +28,7 @@ fn render_instr(instr: &X86Instr, res: &mut Vec<u8>) {
         Imulq(a, rd) => format!(
             "  imulq {}, {}\n",
             render_expr(a),
-            render_expr(rd)
+            render_expr(rd),
         ),
         Xorq(a, rd) => format!("  xorq {}, {}\n", render_expr(a), render_expr(rd)),
         Notq(rd) => format!("  notq {}\n", render_expr(rd)),

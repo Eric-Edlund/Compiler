@@ -30,10 +30,11 @@ where
     use X86Arg::*;
     use X86Instr::*;
     match instr {
-        // Imulq only accepts one memory location
-        Imulq(Deref(r1, offset1), Deref(r2, offset2)) => {
-            push(Movq(Deref(r1, offset1), Reg("rax")));
-            push(Imulq(Reg("rax"), Deref(r2, offset2)));
+        // The imulq destination must be a register
+        Imulq(a, Deref(r2, offset2)) => {
+            push(Movq(Deref(r2, offset2), Reg("rax")));
+            push(Imulq(a, Reg("rax")));
+            push(Movq(Reg("rax"), Deref(r2, offset2)));
         }
         Andq(Deref(r1, offset1), Deref(r2, offset2)) => {
             push(Movq(Deref(r1, offset1), Reg("rax")));

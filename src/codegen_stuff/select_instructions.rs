@@ -231,11 +231,15 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
         LiteralBool(val) => (vec![], X86Arg::Imm(*val as u64)),
         Variable { identifier } => (vec![], X86Arg::Var(identifier.clone())),
         Not(val) => {
+            let tmp = X86Arg::Var(new_var_name());
             let mut instrs = vec![];
             let (prefix, val) = si_expr(val);
             instrs.extend(prefix);
-            instrs.extend([X86Instr::Xorq(X86Arg::Imm(1), val.clone())]);
-            (instrs, val.clone())
+            instrs.extend([
+                X86Instr::Movq(val.clone(), tmp.clone()),
+                X86Instr::Xorq(X86Arg::Imm(1), tmp.clone()),
+            ]);
+            (instrs, tmp.clone())
         }
         BinOp {
             op: BinOperation::Add,

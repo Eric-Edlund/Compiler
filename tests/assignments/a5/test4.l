@@ -1,4 +1,4 @@
-// {"compiles": true, "stdout": ""}
+// {"compiles": true, "stdout": "120\n"}
 
 fn main() {
 	let i = 1;
