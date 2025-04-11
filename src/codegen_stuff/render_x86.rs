@@ -1,4 +1,4 @@
-use super::common::{X86Arg, X86Instr, X86Program};
+use super::x86::{X86Arg, X86Instr, X86Program};
 
 use X86Instr::*;
 

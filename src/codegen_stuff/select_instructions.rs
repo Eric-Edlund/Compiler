@@ -1,5 +1,5 @@
-use crate::codegen_stuff::common::X86Arg;
-use crate::codegen_stuff::common::X86Function;
+use crate::codegen_stuff::x86::X86Arg;
+use crate::codegen_stuff::x86::X86Function;
 use crate::parsing::parsing::BasedAstNode;
 use crate::parsing::parsing::BinOperation;
 use crate::parsing::{parsing::AstNode, FileAnal};
@@ -7,7 +7,7 @@ use ordered_hash_map::ordered_map::OrderedHashMap;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use super::common::{X86Instr, X86Program};
+use super::x86::{X86Instr, X86Program};
 
 static LAST_VAR_NUMBER: Mutex<u32> = Mutex::new(0);
 fn new_var_name() -> String {

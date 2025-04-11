@@ -8,7 +8,12 @@
     clippy::needless_else
 )]
 
-use codegen_stuff::assembly::render;
+pub mod parsing;
+pub mod ast_stuff;
+pub mod type_stuff;
+pub mod codegen_stuff;
+
+use codegen_stuff::render_x86::render;
 use codegen_stuff::patch_instructions::patch_instructions;
 use parsing::build_ast;
 use ast_stuff::explicate_control::explicate_control;
@@ -16,13 +21,8 @@ use ast_stuff::rco::remove_complex_operands;
 use codegen_stuff::allocate_registers::allocate_registers;
 use codegen_stuff::program_setup::{prelude_and_conclusion, wrap_functions_with_stack_logic};
 use codegen_stuff::select_instructions::select_instructions;
-use codegen_stuff::type_checking::type_check;
+use type_stuff::type_checking::type_check;
 use core::str;
-
-pub mod parsing;
-pub mod ast_stuff;
-pub mod codegen_stuff;
-
 
 type CompileResult = Result<Vec<u8>, Vec<String>>;
 

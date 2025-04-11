@@ -11,17 +11,18 @@
     clippy::redundant_field_names,
 )]
 mod ast_stuff;
+mod type_stuff;
 mod codegen_stuff;
 mod parsing;
 
 use ast_stuff::rco::remove_complex_operands;
 use clap::Parser;
 use codegen_stuff::allocate_registers::allocate_registers;
-use codegen_stuff::assembly::{self, render};
+use codegen_stuff::render_x86::render;
 use codegen_stuff::patch_instructions::patch_instructions;
 use codegen_stuff::program_setup::{prelude_and_conclusion, wrap_functions_with_stack_logic};
 use codegen_stuff::select_instructions::select_instructions;
-use codegen_stuff::type_checking::type_check;
+use type_stuff::type_checking::type_check;
 use core::str;
 use std::process::exit;
 use parsing::build_ast;
@@ -76,7 +77,7 @@ async fn main() {
 
     if_debug(format!("Prelude & Conclusion:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     patch_instructions(&mut x86_program);
-    let program_assembly = assembly::render(&x86_program);
+    let program_assembly = render(&x86_program);
     
 
     let mut out = File::create(&args.output_file).unwrap();

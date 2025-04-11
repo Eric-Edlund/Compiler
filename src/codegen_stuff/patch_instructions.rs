@@ -1,6 +1,6 @@
-use crate::codegen_stuff::common::{X86Arg, X86Program};
+use crate::codegen_stuff::x86::{X86Arg, X86Program};
 
-use super::common::X86Instr;
+use super::x86::X86Instr;
 
 pub fn patch_instructions(program: &mut X86Program) {
     for (name, function) in &mut program.functions {
