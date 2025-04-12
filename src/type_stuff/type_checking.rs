@@ -74,7 +74,8 @@ fn top_lvl_check_stmt<'a>(
     scope: &mut ScopeChain<Type<'a>>,
 ) -> TypeCheckResult<Type<'a>> {
     match stmt.as_ref() {
-        FunctionDecl { identifier, body } => {
+        FunctionDecl { identifier, body, ..} => {
+            // TODO: Type check fns
             let duplicate = scope.add(identifier, Type::Unit);
             if duplicate {
                 return Err(format!("Duplicate identifier: {}", identifier));
@@ -143,7 +144,7 @@ fn check_expr<'a>(
             };
             return Ok(*res);
         }
-        FunctionDecl { identifier, body } => {
+        FunctionDecl { identifier, body, .. } => {
             let duplicate = scope.add(
                 identifier,
                 Type::Callable(&Type::Unimplemented, &Type::Unit),

@@ -7,6 +7,9 @@ use regex_automata::{Anchored, Input};
 pub enum TokenType {
     LineComment,
     Return,
+    Colon,
+    Arrow,
+    Comma,
     Fn,
     If,
     While,
@@ -60,6 +63,9 @@ pub fn lex(buf: &dyn AsRef<[u8]>) -> Vec<Token> {
     let options = vec![
         (TokenType::LineComment, Regex::new(r"//.*").unwrap()),
         (TokenType::Return, Regex::new(r"return").unwrap()),
+        (TokenType::Colon, Regex::new(r":").unwrap()),
+        (TokenType::Arrow, Regex::new(r"\->").unwrap()),
+        (TokenType::Comma, Regex::new(r",").unwrap()),
         (TokenType::Fn, Regex::new(r"fn").unwrap()),
         (TokenType::If, Regex::new(r"if").unwrap()),
         (TokenType::While, Regex::new(r"while").unwrap()),
@@ -158,7 +164,7 @@ let x = 7; // Comment
 fn cat() {
     // Comment 2
     return 1 + 9
-} if else while
+} if else while: ->,
 ");
 
         assert_eq!(tokens[0].ty, TokenType::Let);
@@ -193,5 +199,8 @@ fn cat() {
         assert_eq!(tokens[17].ty, TokenType::If);
         assert_eq!(tokens[18].ty, TokenType::Else);
         assert_eq!(tokens[19].ty, TokenType::While);
+        assert_eq!(tokens[20].ty, TokenType::Colon);
+        assert_eq!(tokens[21].ty, TokenType::Arrow);
+        assert_eq!(tokens[22].ty, TokenType::Comma);
     }
 }

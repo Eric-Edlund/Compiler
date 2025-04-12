@@ -28,7 +28,7 @@ pub fn remove_complex_operands(units: &mut FileAnal) {
 // Takes a Block
 fn rco(unit: &mut BasedAstNode) {
     match unit.deref_mut() {
-        FunctionDecl { identifier, body } => {
+        FunctionDecl { identifier, body, .. } => {
             assert_eq!(*identifier, "main");
             let mut new_stmts = Vec::<BasedAstNode>::new();
             rco_stmt(body, &mut new_stmts);

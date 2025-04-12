@@ -22,6 +22,7 @@ pub enum X86Arg {
     Var(String),
 }
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum X86Instr {
     Comment(String),
@@ -123,7 +124,6 @@ impl X86Instr {
                 transform(rd);
             }
             Comment(_) => {},
-            x => todo!("{:?}", x),
         }
     }
 }

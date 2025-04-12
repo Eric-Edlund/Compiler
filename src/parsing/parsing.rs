@@ -22,10 +22,18 @@ pub enum BinOperation {
     NEq,
 }
 
+#[derive(Clone, Debug)]
+pub struct FnParameter<'a> {
+    name: &'a str,
+    ty: Option<&'a str>,
+}
+
 #[derive(Clone)]
 pub enum AstNode<'a> {
     FunctionDecl {
         identifier: &'a str,
+        args: Vec<FnParameter<'a>>,
+        ret_ty: Option<&'a str>,
         body: BasedAstNode<'a>,
     },
     LiteralNumber(i32),
@@ -90,9 +98,14 @@ impl AstNode<'_> {
                 f.write_str("!")?;
                 expr.as_ref().fmt_pretty(indent + 1, f)
             }
-            Self::FunctionDecl { identifier, body } => {
+            Self::FunctionDecl {
+                identifier,
+                args,
+                ret_ty,
+                body,
+            } => {
                 f.write_str(&"  ".repeat(indent))?;
-                f.write_str(&format!("fn {}() ", identifier))?;
+                f.write_str(&format!("fn {}({:?}) -> {:?}", identifier, args, ret_ty))?;
                 body.as_ref().fmt_pretty(indent + 1, f)
             }
             Self::LiteralNumber(arg0) => f.write_str(&format!("{}", arg0)),
@@ -161,7 +174,9 @@ impl AstNode<'_> {
                 vec![expr.clone()]
             }
             LiteralBool(_) => vec![],
-            FunctionDecl { identifier, body } => {
+            FunctionDecl {
+                identifier, body, ..
+            } => {
                 let mut res = vec![body.clone()];
                 res.append(&mut body.child_nodes());
                 res
@@ -341,13 +356,16 @@ where
         let token = &tokens[i];
         i += 1;
         match token.ty {
-            TokenType::Fn => match consume_function(&mut ctx, tokens, &mut i) {
-                Err(e) => {
-                    err_cb(e);
-                    return result;
+            TokenType::Fn => {
+                i -= 1; // Let consume_function consume fn
+                match consume_function(&mut ctx, tokens, &mut i) {
+                    Err(e) => {
+                        err_cb(e);
+                        return result;
+                    }
+                    Ok(node) => result.push(node),
                 }
-                Ok(node) => result.push(node),
-            },
+            }
             TokenType::LineComment => {}
             tok => {
                 err_cb(ParseError::unexpected(token, "File top level", None));
@@ -389,47 +407,146 @@ impl Context {
     }
 }
 
+/// start: The first token to consume, usually fn
 fn consume_function<'a>(
     ctx: &mut Context,
     tokens: &'a [Token],
-    start: &mut usize,
+    next: &mut usize,
 ) -> PResult<BasedAstNode<'a>> {
-    let iter = RefCell::new(tokens[*start - 1..].iter());
-    *start -= 1;
-    let start = RefCell::new(start);
-
-    let take = || {
-        **start.borrow_mut() += 1;
-        let Some(tok) = iter.borrow_mut().next() else {
-            return Err(ParseError::missing("Function"));
-        };
-        Ok(tok)
+    
+    let Some(fn_tok) = tokens.get(*next) else {
+        return Err(ParseError::missing("Expected fn"))
     };
+    assert_eq!(fn_tok.ty, TokenType::Fn);
+    *next += 1;
 
-    let expect = |ty: TokenType| {
-        let tok = take()?;
-        if tok.ty != ty {
-            return Err(ParseError::unexpected(tok, "Function", Some(ty)));
-        }
-        Ok(tok)
+    let Some(ident_tok) = tokens.get(*next) else {
+        return Err(ParseError::missing("Expected function name"))
     };
+    *next += 1;
 
-    let fn_tok = expect(TokenType::Fn)?;
-    let ident_tok = expect(TokenType::Identifier)?;
-    expect(TokenType::LParen)?;
-    expect(TokenType::RParen)?;
-    expect(TokenType::LBrace)?;
+    let Some(l_paren) = tokens.get(*next) else {
+        return Err(ParseError::missing("Expected lparen"))
+    };
+    *next += 1;
 
-    **start.borrow_mut() -= 1;
-    let blk = consume_block(ctx, tokens, *start.borrow_mut())?;
+    let args = consume_function_params_list(ctx, tokens, next)?;
+
+    let Some(r_paren) = tokens.get(*next) else {
+        return Err(ParseError::missing("Expected lparen"))
+    };
+    *next += 1;
+
+    let ret_ty = consume_function_ret_type(ctx, tokens, next)?;
+
+    let Some(l_brace) = tokens.get(*next) else {
+        return Err(ParseError::missing("Expected lbrace"))
+    };
+    *next += 1;
+
+    *next -= 1;
+    let blk = consume_block(ctx, tokens, next)?;
 
     return Ok(BasedAstNode::<'a> {
         inner: Box::new(FunctionDecl {
             identifier: &ident_tok.src,
+            args,
+            ret_ty,
             body: blk,
         }),
         token: Some(fn_tok),
     });
+}
+
+// Does not consume the closing paren,
+// Is given the first token after the opening paren
+fn consume_function_params_list<'a>(
+    ctx: &mut Context,
+    tokens: &'a [Token],
+    start: &mut usize,
+) -> PResult<Vec<FnParameter<'a>>> {
+    enum State {
+        ParamName,
+        TypeOrComma,
+        Type,
+        Comma,
+    }
+    use State::*;
+    let mut state = ParamName;
+    let mut params: Vec<FnParameter> = vec![];
+
+    while let Some(tok) = tokens.get(*start) {
+        if tok.ty == TokenType::RParen {
+            return Ok(params);
+        };
+        match state {
+            ParamName => {
+                if tok.ty != TokenType::Identifier {
+                    return Err(ParseError::other("Invalid params list"));
+                }
+                params.push(FnParameter {
+                    name: &tok.src,
+                    ty: None,
+                });
+                state = TypeOrComma;
+                *start += 1;
+            }
+            TypeOrComma => {
+                if tok.ty == TokenType::Colon {
+                    state = Type;
+                } else {
+                    state = ParamName;
+                }
+                *start += 1;
+            }
+            Type => {
+                if tok.ty != TokenType::Identifier {
+                    return Err(ParseError::other("Types must be lexically identifiers."));
+                }
+                params.last_mut().unwrap().ty = Some(&tok.src);
+                state = Comma;
+                *start += 1;
+            }
+            Comma => {
+                if tok.ty != TokenType::Comma {
+                    return Err(ParseError::missing("Expecting a comma"));
+                }
+                state = ParamName;
+                *start += 1;
+            }
+        }
+    }
+
+    panic!("The above code is a state machine which should return in all cases");
+}
+
+/// Starts with token after )
+fn consume_function_ret_type<'a>(
+    ctx: &mut Context,
+    tokens: &'a [Token],
+    next: &mut usize,
+) -> PResult<Option<&'a str>> {
+    let Some(tok) = tokens.get(*next) else {
+        return Ok(None);
+    };
+
+    if tok.ty != TokenType::Arrow {
+        return Ok(None);
+    }
+    let Some(type_tok) = tokens.get(*next + 1) else {
+        return Ok(None);
+    };
+
+    if type_tok.ty != TokenType::Identifier {
+        return Err(ParseError::unexpected(
+            type_tok,
+            "Expecting type name identifier",
+            Some(TokenType::Identifier),
+        ));
+    }
+    *next += 2;
+
+    return Ok(Some(type_tok.src.as_str()));
 }
 
 /// start should be the first token to consume, probably {
@@ -845,7 +962,7 @@ fn consume_expression<'a>(
 mod tests {
     use crate::parsing::{
         lexing,
-        parsing::{consume_block, AstNode, BinOperation, Context},
+        parsing::{consume_block, consume_function, AstNode, BinOperation, Context},
     };
 
     use super::consume_expression;
@@ -1072,5 +1189,23 @@ fn main() {
         let Block { stmts } = body_blk.as_ref() else {
             panic!()
         };
+    }
+
+    #[test]
+    fn function_signature() {
+        let toks = lexing::lex(
+            &r#"
+fn add1(n: int) -> int {
+    return n + 1;
+}
+"#);
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let res = consume_function(&mut ctx, &toks, &mut 0);
+        if let Err(parse_err) = res {
+            panic!("{:?}", parse_err);
+        };
+        let ast = res.unwrap();
+        dbg!(&ast);
     }
 }

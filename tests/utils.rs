@@ -11,7 +11,8 @@ pub struct TestExpectedResult {
 }
 
 pub fn read_expectations(src_text: &str) -> TestExpectedResult {
-    let json_src = &src_text[3..src_text.find('\n').unwrap()];
+    const MSG: &str = "Must have // {..compile expectations..} on first line of test files";
+    let json_src = &src_text.get(3..src_text.find('\n').expect(MSG)).expect(MSG);
     from_str::<TestExpectedResult>(json_src).unwrap()
 }
 
@@ -80,7 +81,7 @@ pub fn test_files(tests: &[&str]) {
         for config in COMPILATION_CONFIGS {
             let comp_res = compile_program(test, config);
             let Ok(ref text) = comp_res else {
-                panic!();
+                panic!("Failed to compile test program {}: {:?}", i, comp_res.err());
             };
             std::fs::write("out.s", text).expect("Failed to write program file.");
             let link_res = link_runtime(Path::new("out.s"));

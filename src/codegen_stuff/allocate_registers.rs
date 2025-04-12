@@ -299,7 +299,6 @@ fn reads_of<'b, 'a: 'b>(instr: &'a X86Instr, ctx: &'b PartialSolution) -> Vec<&'
             r.extend(as_var(rd));
             r
         }
-        _ => todo!(),
     }
 }
 
@@ -330,6 +329,5 @@ fn writes_of(instr: &X86Instr) -> Vec<&str> {
         Andq(a, rd) => as_var(rd),
         Orq(a, rd) => as_var(rd),
         Jmp { .. } => vec![],
-        x => todo!("{:?}", x),
     }
 }

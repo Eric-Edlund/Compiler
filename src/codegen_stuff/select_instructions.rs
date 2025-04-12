@@ -29,7 +29,7 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
         .asts
         .iter()
         .map(|node| {
-            let AstNode::FunctionDecl { identifier, body } = node.as_ref() else {
+            let AstNode::FunctionDecl { identifier, body, .. } = node.as_ref() else {
                 panic!("All file top level structures are function declarations.");
             };
             (identifier.to_string(), body.clone())
@@ -53,7 +53,7 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
 
 fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     use AstNode::*;
-    let FunctionDecl { identifier, body } = exp.as_ref() else {
+    let FunctionDecl { identifier, body, .. } = exp.as_ref() else {
         panic!("Expecting a function declaration.");
     };
     assert_eq!(identifier, &"main");
