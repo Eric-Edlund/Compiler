@@ -77,7 +77,7 @@ pub fn lex(buf: &dyn AsRef<[u8]>) -> Vec<Token> {
         (TokenType::False, Regex::new(r"false").unwrap()),
         (
             TokenType::Identifier,
-            Regex::new(r"[a-zA-Z][a-zA-Z0-9]*").unwrap(),
+            Regex::new(r"[a-zA-Z][a-zA-Z0-9_]*").unwrap(),
         ),
         (TokenType::NumberLit, Regex::new(r"[0-9]+").unwrap()),
         (TokenType::LParen, Regex::new(r"\(").unwrap()),

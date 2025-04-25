@@ -73,7 +73,7 @@ pub const COMPILATION_CONFIGS: &[CompilationConfig] = &[
 
 pub fn test_files(tests: &[&str]) {
     for (test, i) in tests.iter().zip(1..) {
-        print!("\r\x1b[2kTesting program {}...", i);
+        println!("Testing program {}...", i);
         let expected_result = read_expectations(test);
 
         // Compile with all config combos

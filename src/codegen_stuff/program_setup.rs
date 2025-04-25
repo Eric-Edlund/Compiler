@@ -1,4 +1,5 @@
-use super::x86::{X86Arg, X86Instr, X86Program};
+use std::iter::empty;
+use super::x86::{X86Arg, X86Instr, X86Program, CALLEE_SAVED_REGISTERS};
 use X86Arg::*;
 use X86Instr::*;
 
@@ -8,27 +9,44 @@ pub fn wrap_functions_with_stack_logic(program: &mut X86Program) {
         let add_frame_name = format!("{}_stack_setup", name);
         func.prefix_block_mut((
             add_frame_name,
-            vec![
-                // A single instruction which stores %rbp in a spot on the stack,
-                // decrementing rsp enough to make space.
-                Pushq(Reg("rbp")),
-                // Update the base pointer to the current stack pointer
-                Movq(Reg("rsp"), Reg("rbp")),
-                Subq(Imm(func.stack_size as u64), Reg("rsp")),
-                Jmp(func.lead_block.clone()),
-            ],
+            empty()
+                // Allocate stack frame
+                .chain([
+                    // A single instruction which stores %rbp in a spot on the stack,
+                    // decrementing rsp enough to make space.
+                    Pushq(Reg("rbp")),
+                    // Update the base pointer to the current stack pointer
+                    Movq(Reg("rsp"), Reg("rbp")),
+                    Subq(Imm(func.stack_size as u64), Reg("rsp")),
+                ])
+                // Save callee saved regs
+                .chain(
+                    CALLEE_SAVED_REGISTERS
+                        .iter()
+                        .map(|reg| X86Instr::Pushq(X86Arg::Reg(reg))),
+                )
+                .collect(),
         ));
 
         let teardown_frame_name = format!("{}_stack_teardown", name);
         func.suffix_block_mut((
             teardown_frame_name,
-            vec![
-                Addq(Imm(func.stack_size as u64), Reg("rsp")),
-                // rsp -= 8, read it into rbp
-                Popq(Reg("rbp")),
-                // rsp += 8, read that value into %rsp, jump back to previous frame
-                Retq,
-            ],
+            empty()
+                // Restore callee saved regs
+                .chain(
+                    CALLEE_SAVED_REGISTERS
+                        .iter()
+                        .map(|reg| X86Instr::Popq(X86Arg::Reg(reg))),
+                )
+                // Teardown stack frame
+                .chain([
+                    Addq(Imm(func.stack_size as u64), Reg("rsp")),
+                    // rsp -= 8, read it into rbp
+                    Popq(Reg("rbp")),
+                    // rsp += 8, read that value into %rsp, jump back to previous frame
+                    Retq,
+                ])
+                .collect(),
         ));
     }
 }

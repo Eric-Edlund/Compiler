@@ -1,5 +1,6 @@
 use crate::codegen_stuff::x86::X86Arg;
 use crate::codegen_stuff::x86::X86Function;
+use crate::codegen_stuff::x86::ARG_REGISTERS;
 use crate::codegen_stuff::x86::CALLER_SAVED_REGISTERS;
 use crate::parsing::parsing::BasedAstNode;
 use crate::parsing::parsing::BinOperation;
@@ -29,7 +30,10 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
         .asts
         .iter()
         .map(|node| {
-            let AstNode::FunctionDecl { identifier, body, .. } = node.as_ref() else {
+            let AstNode::FunctionDecl {
+                identifier, body, ..
+            } = node.as_ref()
+            else {
                 panic!("All file top level structures are function declarations.");
             };
             (identifier.to_string(), body.clone())
@@ -53,10 +57,12 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
 
 fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     use AstNode::*;
-    let FunctionDecl { identifier, body, .. } = exp.as_ref() else {
+    let FunctionDecl {
+        identifier, body, ..
+    } = exp.as_ref()
+    else {
         panic!("Expecting a function declaration.");
     };
-    assert_eq!(identifier, &"main");
 
     let mut blocks = OrderedHashMap::new();
 
@@ -107,22 +113,51 @@ fn si_stmt(
             prepare_value.extend([X86Instr::Movq(arg, X86Arg::Var(identifier.clone()))]);
             blocks.get_mut(current_block).unwrap().extend(prepare_value);
         }
-        FunctionCall { function, ref args } => {
+        FunctionCall {
+            function,
+            ref args_tuple,
+        } => {
             let Variable { identifier } = function.as_ref() else {
                 panic!("Non identifier functions not implemented. (Or allowed?)");
             };
-            assert_eq!(identifier, "print", "Only print function is implemented.");
 
-            let (prefix, args) = si_expr(args);
+            let identifier = if identifier == "print" {
+                "print_int".to_string()
+            } else {
+                identifier.clone()
+            };
+
+            let LiteralTuple { elements: args } = args_tuple.as_ref() else {
+                todo!("{:?}", args_tuple)
+            };
+
+            let mut prefix = Vec::new();
+            let mut new_args = vec![];
+            for arg in args {
+                let (p, new_arg) = si_expr(arg);
+                prefix.extend(p);
+                new_args.push(new_arg);
+            }
 
             blocks.get_mut(current_block).unwrap().extend(
-                CALLER_SAVED_REGISTERS
-                    .iter()
-                    .map(|reg| X86Instr::Pushq(X86Arg::Reg(reg)))
-                    .chain([
-                        X86Instr::Movq(args, X86Arg::Reg("rdi")),
-                        X86Instr::Callq("print_int".to_string()),
-                    ])
+                prefix
+                    .into_iter()
+                    // Save registers
+                    .chain(
+                        CALLER_SAVED_REGISTERS
+                            .iter()
+                            .map(|reg| X86Instr::Pushq(X86Arg::Reg(reg))),
+                    )
+                    // Put args into arg registers
+                    .chain(
+                        new_args
+                            .into_iter()
+                            .zip(ARG_REGISTERS)
+                            .map(|(arg, reg)| X86Instr::Movq(arg, X86Arg::Reg(reg))),
+                    )
+                    // Call the fn
+                    .chain([X86Instr::Callq(identifier.clone())])
+                    // Restore saved regs
                     .chain(
                         CALLER_SAVED_REGISTERS
                             .iter()
@@ -222,6 +257,42 @@ fn si_stmt(
 
             blocks.insert(cont_label.clone(), Vec::new());
             *current_block = cont_label.clone();
+        }
+        Return { value } => {
+            if value.is_none() {
+                blocks
+                    .get_mut(current_block)
+                    .unwrap()
+                    .extend([X86Instr::Retq]);
+                return;
+            }
+
+            let Some(value) = value.as_ref() else {
+                panic!()
+            };
+
+            use AstNode::*;
+            match value.as_ref() {
+                LiteralNumber(n) => blocks
+                    .get_mut(current_block)
+                    .unwrap()
+                    .extend([X86Instr::Movq(X86Arg::Imm(*n as u64), X86Arg::Reg("rax"))]),
+                Variable { identifier } => {
+                    blocks
+                        .get_mut(current_block)
+                        .unwrap()
+                        .extend([X86Instr::Movq(
+                            X86Arg::Var(identifier.to_string()),
+                            X86Arg::Reg("rax"),
+                        )])
+                }
+                _ => todo!("Function return not implemented for node type {:?}", value),
+            }
+
+            blocks
+                .get_mut(current_block)
+                .unwrap()
+                .extend([X86Instr::Retq]);
         }
         x => panic!("Si_statment not implemented for {:?}", x),
     }

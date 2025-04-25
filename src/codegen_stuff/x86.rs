@@ -10,6 +10,9 @@ pub const CALLER_SAVED_REGISTERS: &[&str] = &[
 pub const CALLEE_SAVED_REGISTERS: &[&str] = &[
     "rbx", "r12", "r13", "r14"
 ];
+pub const ARG_REGISTERS: &[&str] = &[
+    "rdi", "rsi", "rdx", "rcx"
+];
 // Notice that r15 is not available here, it's for the gc stack base pointer.
 
 #[derive(Clone, Debug, Eq, PartialEq)]

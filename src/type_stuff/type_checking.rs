@@ -115,7 +115,7 @@ fn check_expr<'a>(
         }
         EmptyParens => Ok(Type::Unit),
         Return { .. } => Ok(Type::Unit),
-        CommaList { .. } => todo!(),
+        LiteralTuple { .. } => todo!(),
         Variable { identifier } => {
             return check_variable(stmt, scope);
         }
@@ -138,7 +138,7 @@ fn check_expr<'a>(
             }
             return Ok(Type::Unit);
         }
-        FunctionCall { function, args } => {
+        FunctionCall { function, args_tuple: args } => {
             let Type::Callable(args, res) = check_expr(function, scope)? else {
                 return Err("Can only call values of type Callable.".to_string());
             };
@@ -198,6 +198,7 @@ fn check_binop<'a>(
     use BinOperation::*;
     match op {
         Bang => panic!("Why is bang in a binop node?"),
+        LiteralJoinTuple => panic!("This shouldn't have escaped the parsing code."),
         And | Or => {
             let lhs_t = check_expr(lhs, scope)?;
             let rhs_t = check_expr(rhs, scope)?;

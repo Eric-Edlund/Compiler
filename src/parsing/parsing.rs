@@ -20,6 +20,7 @@ pub enum BinOperation {
     LEq,
     GEq,
     NEq,
+    LiteralJoinTuple,
 }
 
 #[derive(Clone, Debug)]
@@ -57,12 +58,13 @@ pub enum AstNode<'a> {
     },
     FunctionCall {
         function: BasedAstNode<'a>,
-        args: BasedAstNode<'a>,
+        /// Must be a tuple
+        args_tuple: BasedAstNode<'a>,
     },
     Variable {
         identifier: String,
     },
-    CommaList {
+    LiteralTuple {
         elements: Vec<BasedAstNode<'a>>,
     },
     EmptyParens,
@@ -133,11 +135,12 @@ impl AstNode<'_> {
                 f.write_str(&format!("let {} = {:?}", identifier, rhs))
             }
             Self::Assignment { lhs, rhs } => f.write_str(&format!("{:?} = {:?}", lhs, rhs)),
-            Self::FunctionCall { function, args } => {
-                f.write_str(&format!("{:?}({:?})", function, args))
-            }
+            Self::FunctionCall {
+                function,
+                args_tuple: args,
+            } => f.write_str(&format!("{:?}({:?})", function, args)),
             Self::Variable { identifier } => f.write_str(identifier),
-            Self::CommaList { elements } => f.write_str(&format!("{:?}", elements)),
+            Self::LiteralTuple { elements } => f.write_str(&format!("{:?}", elements)),
             Self::IfStmt {
                 condition,
                 then_blk,
@@ -202,14 +205,17 @@ impl AstNode<'_> {
                 res.append(&mut rhs.child_nodes());
                 res
             }
-            FunctionCall { function, args } => {
-                let mut res = vec![function.clone(), args.clone()];
+            FunctionCall {
+                function,
+                args_tuple: args,
+            } => {
+                let mut res = vec![function.clone()];
                 res.append(&mut function.child_nodes());
-                res.append(&mut args.child_nodes());
+                res.extend(args.child_nodes());
                 res
             }
             Variable { identifier } => vec![],
-            CommaList { elements } => {
+            LiteralTuple { elements } => {
                 let mut res = elements.clone();
                 for el in elements {
                     res.append(&mut el.child_nodes());
@@ -413,34 +419,33 @@ fn consume_function<'a>(
     tokens: &'a [Token],
     next: &mut usize,
 ) -> PResult<BasedAstNode<'a>> {
-    
     let Some(fn_tok) = tokens.get(*next) else {
-        return Err(ParseError::missing("Expected fn"))
+        return Err(ParseError::missing("Expected fn"));
     };
     assert_eq!(fn_tok.ty, TokenType::Fn);
     *next += 1;
 
     let Some(ident_tok) = tokens.get(*next) else {
-        return Err(ParseError::missing("Expected function name"))
+        return Err(ParseError::missing("Expected function name"));
     };
     *next += 1;
 
     let Some(l_paren) = tokens.get(*next) else {
-        return Err(ParseError::missing("Expected lparen"))
+        return Err(ParseError::missing("Expected lparen"));
     };
     *next += 1;
 
     let args = consume_function_params_list(ctx, tokens, next)?;
 
     let Some(r_paren) = tokens.get(*next) else {
-        return Err(ParseError::missing("Expected lparen"))
+        return Err(ParseError::missing("Expected lparen"));
     };
     *next += 1;
 
     let ret_ty = consume_function_ret_type(ctx, tokens, next)?;
 
     let Some(l_brace) = tokens.get(*next) else {
-        return Err(ParseError::missing("Expected lbrace"))
+        return Err(ParseError::missing("Expected lbrace"));
     };
     *next += 1;
 
@@ -736,7 +741,8 @@ fn consume_expression<'a>(
             BinOperation::NEq => 4,
             BinOperation::And => 3,
             BinOperation::Or => 3,
-            BinOperation::Assign => 2,
+            BinOperation::LiteralJoinTuple => 2,
+            BinOperation::Assign => 1,
         }
     }
 
@@ -754,6 +760,14 @@ fn consume_expression<'a>(
     ) -> BasedAstNode<'a> {
         match op {
             BinOperation::Bang => panic!("Bang is not a binary operation."),
+            BinOperation::LiteralJoinTuple => {
+                let mut els = Vec::<BasedAstNode<'a>>::new();
+                match lhs.as_ref() {
+                    LiteralTuple { elements } => els.extend(elements.clone()),
+                    _ => els.push(lhs),
+                };
+                LiteralTuple { elements: els }.into()
+            }
             BinOperation::And => BinOp {
                 op: BinOperation::And,
                 lhs,
@@ -766,11 +780,22 @@ fn consume_expression<'a>(
                 rhs,
             }
             .into(),
-            BinOperation::Call => FunctionCall {
-                function: lhs,
-                args: rhs,
+            BinOperation::Call => {
+                let mut rhs = rhs;
+                if let LiteralTuple { .. } = rhs.as_ref() {
+                } else {
+                    rhs = LiteralTuple {
+                        elements: vec![rhs],
+                    }
+                    .into();
+                };
+                FunctionCall {
+                    function: lhs,
+                    args_tuple: rhs,
+                }
+                .into()
             }
-            .into(),
+
             BinOperation::Assign => BasedAstNode {
                 inner: Box::new(Assignment { lhs, rhs }),
                 token: None,
@@ -893,7 +918,15 @@ fn consume_expression<'a>(
                     inner: Box::new(LiteralNumber(str::parse::<i32>(&tok.src).unwrap())),
                     token: Some(tok),
                 });
-                None
+                if exprs
+                    .last()
+                    .is_some_and(|it| matches!(*it.inner, AstNode::Variable { .. }))
+                {
+                    // Then it's a function call baby
+                    Some(BinOperation::Call)
+                } else {
+                    None
+                }
             }
             TokenType::And => Some(BinOperation::And),
             TokenType::Or => Some(BinOperation::Or),
@@ -904,6 +937,7 @@ fn consume_expression<'a>(
             TokenType::GEqCmp => Some(BinOperation::GEq),
             TokenType::LEqCmp => Some(BinOperation::LEq),
             TokenType::Bang => Some(BinOperation::Bang),
+            TokenType::Comma => Some(BinOperation::LiteralJoinTuple),
             other => panic!("Expression encountered {:?}", other),
         };
         last_token_was_op = op.is_some();
@@ -1060,13 +1094,21 @@ mod tests {
         let Block { stmts } = then_blk.as_ref() else {
             panic!();
         };
-        let FunctionCall { function, args } = stmts[0].as_ref() else {
+        let FunctionCall {
+            function,
+            args_tuple: args,
+        } = stmts[0].as_ref()
+        else {
             panic!();
         };
         let Block { stmts } = else_blk.as_ref().unwrap().as_ref() else {
             panic!();
         };
-        let FunctionCall { function, args } = stmts[0].as_ref() else {
+        let FunctionCall {
+            function,
+            args_tuple: args,
+        } = stmts[0].as_ref()
+        else {
             panic!();
         };
 
@@ -1192,13 +1234,14 @@ fn main() {
     }
 
     #[test]
-    fn function_signature() {
+    fn function_signature_1() {
         let toks = lexing::lex(
             &r#"
 fn add1(n: int) -> int {
     return n + 1;
 }
-"#);
+"#,
+        );
         let mut ctx = Context::new();
         ctx.print_changes = true;
         let res = consume_function(&mut ctx, &toks, &mut 0);
@@ -1207,5 +1250,87 @@ fn add1(n: int) -> int {
         };
         let ast = res.unwrap();
         dbg!(&ast);
+    }
+
+    #[test]
+    fn function_signature_2() {
+        let toks = lexing::lex(
+            &r#"
+fn add1(n: int, a_tw: str) -> Cat {
+    return n + 1;
+}
+"#,
+        );
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let res = consume_function(&mut ctx, &toks, &mut 0);
+        if let Err(parse_err) = res {
+            panic!("{:?}", parse_err);
+        };
+        let ast = res.unwrap();
+        dbg!(&ast);
+    }
+
+    #[test]
+    fn function_call() {
+        let toks = lexing::lex(
+            &r#"
+{
+    add(a, 1);   
+    take(a);    
+    take a;    
+    add((a, 1));
+}
+"#,
+        );
+        // call(add, tuple(a, 1))
+        // call(add, tuple(a))
+        // call(add, tuple(a))
+        // call(add, tuple(tuple(a, 1)))
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let res = consume_block(&mut ctx, &toks, &mut 0);
+        if let Err(parse_err) = res {
+            panic!("{:?}", parse_err);
+        };
+        let ast = res.unwrap();
+        dbg!(&ast);
+
+        let AstNode::Block { stmts } = ast.as_ref() else {
+            panic!()
+        };
+        let AstNode::FunctionCall {
+            function,
+            args_tuple,
+        } = stmts[0].as_ref()
+        else {
+            panic!()
+        };
+        let AstNode::LiteralTuple { elements } = args_tuple.as_ref() else {
+            panic!()
+        };
+
+        let AstNode::FunctionCall {
+            function,
+            args_tuple,
+        } = stmts[1].as_ref()
+        else {
+            panic!()
+        };
+        let AstNode::LiteralTuple { elements } = args_tuple.as_ref() else {
+            panic!()
+        };
+
+        dbg!(&stmts[2]);
+        let AstNode::FunctionCall {
+            function,
+            args_tuple,
+        } = stmts[2].as_ref()
+        else {
+            panic!("{:?}", stmts[2])
+        };
+        let AstNode::LiteralTuple { elements } = args_tuple.as_ref() else {
+            panic!()
+        };
     }
 }

@@ -28,8 +28,9 @@ pub fn remove_complex_operands(units: &mut FileAnal) {
 // Takes a Block
 fn rco(unit: &mut BasedAstNode) {
     match unit.deref_mut() {
-        FunctionDecl { identifier, body, .. } => {
-            assert_eq!(*identifier, "main");
+        FunctionDecl {
+            identifier, body, ..
+        } => {
             let mut new_stmts = Vec::<BasedAstNode>::new();
             rco_stmt(body, &mut new_stmts);
         }
@@ -88,12 +89,14 @@ fn rco_stmt<'a>(unit: &mut BasedAstNode<'a>, new_stmts: &mut Vec<BasedAstNode<'a
             let new_rhs = rco_expr(rhs, new_stmts);
             *rhs = new_rhs;
         }
-        FunctionCall { function, args } => {
+        FunctionCall {
+            function,
+            args_tuple: args,
+        } => {
             let Variable { .. } = function.as_ref() else {
                 panic!("Function calls must call variables.");
             };
-            let new_args = rco_expr(args, new_stmts);
-            *args = new_args
+            *unit = rco_expr(unit, new_stmts);
         }
         IfStmt {
             ref mut condition,
@@ -124,16 +127,48 @@ fn rco_stmt<'a>(unit: &mut BasedAstNode<'a>, new_stmts: &mut Vec<BasedAstNode<'a
             *condition = atomic_condition;
             rco_stmt(body_blk, new_stmts);
         }
+        Return { ref mut value } => {
+            if let Some(v) = value {
+                let ret_val = rco_expr(v, new_stmts);
+                *value = Some(ret_val.clone())
+            }
+        }
         _ => panic!("Unimplemented {:?}", *unit.as_ref()),
     }
 }
 
+/// Take the possibly nested expression and flatten it into intermediate assignments
+/// and temporaries. Add the calculating statements to new_stmts and return a new
+/// variable storing the calculated result.
 fn rco_expr<'a>(
     unit: &BasedAstNode<'a>,
     new_stmts: &mut Vec<BasedAstNode<'a>>,
 ) -> BasedAstNode<'a> {
     match unit.as_ref() {
         Variable { .. } | LiteralNumber(_) | LiteralBool(_) => unit.clone(),
+        LiteralTuple { elements } => {
+            let new_elements = elements
+                .into_iter()
+                .map(|arg| rco_expr(arg, new_stmts))
+                .collect();
+
+            LiteralTuple {
+                elements: new_elements,
+            }
+            .into()
+        }
+        FunctionCall {
+            function,
+            args_tuple,
+        } => {
+            let new_args = rco_expr(args_tuple, new_stmts);
+
+            FunctionCall {
+                function: function.clone(),
+                args_tuple: new_args,
+            }
+            .into()
+        }
         Not(expr) => {
             let expr = rco_expr(expr, new_stmts);
             let tmp: BasedAstNode = Variable {
@@ -153,6 +188,7 @@ fn rco_expr<'a>(
             use BinOperation::*;
             match op {
                 Bang => panic!("Why is bang in a binary operation?"),
+                LiteralJoinTuple{..} => panic!("This should never leave the parsing section"),
                 Eq | LEq | GEq | Gt | Lt | NEq | Add | Sub | Mult | Div | Call | And | Or => {
                     let lhs = rco_expr(lhs, new_stmts);
                     let rhs = rco_expr(rhs, new_stmts);
