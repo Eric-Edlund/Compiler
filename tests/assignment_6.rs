@@ -12,6 +12,6 @@ const TESTS: &[&str] = &[
 ];
 
 #[test]
-fn test_assignment_7_tests() {
+fn test_assignment_6_tests() {
     test_files(TESTS)
 }

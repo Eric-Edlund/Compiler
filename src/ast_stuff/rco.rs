@@ -161,7 +161,7 @@ fn rco_expr<'a>(
             function,
             args_tuple,
         } => {
-            assert!(matches!(args_tuple.as_ref(), LiteralTuple{..}));
+            assert!(matches!(args_tuple.as_ref(), LiteralTuple { .. }));
             let new_args = rco_expr(args_tuple, new_stmts);
 
             FunctionCall {
@@ -189,7 +189,7 @@ fn rco_expr<'a>(
             use BinOperation::*;
             match op {
                 Bang => panic!("Why is bang in a binary operation?"),
-                LiteralJoinTuple{..} => panic!("This should never leave the parsing section"),
+                LiteralJoinTuple { .. } => panic!("This should never leave the parsing section"),
                 Eq | LEq | GEq | Gt | Lt | NEq | Add | Sub | Mult | Div | Call | And | Or => {
                     let lhs = rco_expr(lhs, new_stmts);
                     let rhs = rco_expr(rhs, new_stmts);
@@ -217,7 +217,26 @@ fn rco_expr<'a>(
                     );
                     BasedAstNode::from(EmptyParens)
                 }
-                _ => todo!()
+                Subscript => {
+                    let lhs = rco_expr(lhs, new_stmts);
+                    let rhs = rco_expr(rhs, new_stmts);
+                    let tmp: BasedAstNode = Variable {
+                        identifier: temp_var_sym(),
+                    }.into();
+                    new_stmts.push(
+                        Assignment {
+                            lhs: tmp.clone(),
+                            rhs: BinOp {
+                                lhs,
+                                rhs,
+                                op: *op,
+                            }.into(),
+                        }
+                        .into(),
+                    );
+                    tmp
+                }
+                _ => todo!("{:?}", op),
             }
         }
         x => {
