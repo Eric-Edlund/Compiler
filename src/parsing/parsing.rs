@@ -20,7 +20,9 @@ pub enum BinOperation {
     LEq,
     GEq,
     NEq,
+    /// The comma in (a, b)
     LiteralJoinTuple,
+    Subscript,
 }
 
 #[derive(Clone, Debug)]
@@ -707,10 +709,10 @@ fn consume_declaration<'a>(
     })
 }
 
-/// Expressions are only ended by semicolons or ) or { or }
+/// Expressions are only ended by semicolons or ) or { or } or ]
 /// This function accepts the position of the first token of the expression
 /// and returns the position of the first token not consumed. This does
-/// not include the semi or ), unless the expression started on a (.
+/// not include the semi or ) or ], unless the expression started on a ( or [.
 fn consume_expression<'a>(
     ctx: &mut Context,
     tokens: &'a [Token],
@@ -725,117 +727,10 @@ fn consume_expression<'a>(
         // return consume_expression
     }
 
-    fn get_presidence(op: &BinOperation) -> u32 {
-        match op {
-            BinOperation::Call => 10,
-            BinOperation::Bang => 9,
-            BinOperation::Mult => 8,
-            BinOperation::Div => 8,
-            BinOperation::Add => 5,
-            BinOperation::Sub => 5,
-            BinOperation::Eq => 4,
-            BinOperation::Lt => 4,
-            BinOperation::Gt => 4,
-            BinOperation::LEq => 4,
-            BinOperation::GEq => 4,
-            BinOperation::NEq => 4,
-            BinOperation::And => 3,
-            BinOperation::Or => 3,
-            BinOperation::LiteralJoinTuple => 2,
-            BinOperation::Assign => 1,
-        }
-    }
-
     fn apply_unary<'a>(op: &BinOperation, expr: BasedAstNode<'a>) -> BasedAstNode<'a> {
         match op {
             BinOperation::Bang => Not(expr).into(),
             x => panic!("Bang is the only unary operator. Not {:?}", x),
-        }
-    }
-
-    fn apply_op<'a>(
-        op: &BinOperation,
-        lhs: BasedAstNode<'a>,
-        rhs: BasedAstNode<'a>,
-    ) -> BasedAstNode<'a> {
-        match op {
-            BinOperation::Bang => panic!("Bang is not a binary operation."),
-            BinOperation::LiteralJoinTuple => {
-                let mut els = Vec::<BasedAstNode<'a>>::new();
-                match lhs.as_ref() {
-                    LiteralTuple { elements } => els.extend(elements.clone()),
-                    _ => els.push(lhs),
-                };
-                LiteralTuple { elements: els }.into()
-            }
-            BinOperation::And => BinOp {
-                op: BinOperation::And,
-                lhs,
-                rhs,
-            }
-            .into(),
-            BinOperation::Or => BinOp {
-                op: BinOperation::Or,
-                lhs,
-                rhs,
-            }
-            .into(),
-            BinOperation::Call => {
-                let mut rhs = rhs;
-                if let LiteralTuple { .. } = rhs.as_ref() {
-                } else {
-                    rhs = LiteralTuple {
-                        elements: vec![rhs],
-                    }
-                    .into();
-                };
-                FunctionCall {
-                    function: lhs,
-                    args_tuple: rhs,
-                }
-                .into()
-            }
-
-            BinOperation::Assign => BasedAstNode {
-                inner: Box::new(Assignment { lhs, rhs }),
-                token: None,
-            },
-            BinOperation::Mult => BinOp {
-                op: BinOperation::Mult,
-                lhs,
-                rhs,
-            }
-            .into(),
-            BinOperation::Div => BasedAstNode {
-                inner: Box::new(BinOp {
-                    op: BinOperation::Div,
-                    lhs,
-                    rhs,
-                }),
-                token: None,
-            },
-            BinOperation::Add => BasedAstNode {
-                inner: Box::new(BinOp {
-                    op: BinOperation::Add,
-                    lhs,
-                    rhs,
-                }),
-                token: None,
-            },
-            BinOperation::Sub => BasedAstNode {
-                inner: Box::new(BinOp {
-                    op: BinOperation::Sub,
-                    lhs,
-                    rhs,
-                }),
-                token: None,
-            },
-            BinOperation::Eq
-            | BinOperation::NEq
-            | BinOperation::Lt
-            | BinOperation::Gt
-            | BinOperation::LEq
-            | BinOperation::GEq => BinOp { op: *op, lhs, rhs }.into(),
         }
     }
 
@@ -856,15 +751,33 @@ fn consume_expression<'a>(
         *start += 1;
         let op: Option<BinOperation> = match tok.ty {
             TokenType::Semi => break,
+            TokenType::LBracket => {
+                if tokens[*start].ty == TokenType::RBracket {
+                    return Err(ParseError::unexpected(&tokens[*start], "Expression", None));
+                }
+                let subscript_value = consume_expression(ctx, tokens, start)?;
+
+                let TokenType::RBracket = tokens[*start].ty else {
+                    return Err(ParseError::missing("Expression, expecting ]"));
+                };
+                *start += 1;
+
+                exprs.push(subscript_value);
+                if is_first_token {
+                    todo!("List literals")
+                } else {
+                    Some(BinOperation::Subscript)
+                }
+            }
             TokenType::LParen => {
                 let parenthized_expr = if tokens[*start].ty == TokenType::RParen {
-                    Some(BasedAstNode {
+                    BasedAstNode {
                         inner: Box::new(EmptyParens),
                         token: Some(&tokens[*start]),
-                    })
+                    }
                 } else {
                     let r = consume_expression(ctx, tokens, start)?;
-                    Some(r)
+                    r
                 };
 
                 let TokenType::RParen = tokens[*start].ty else {
@@ -872,9 +785,7 @@ fn consume_expression<'a>(
                 };
                 *start += 1;
 
-                if let Some(expr) = parenthized_expr {
-                    exprs.push(expr);
-                }
+                exprs.push(parenthized_expr);
 
                 if !is_first_token
                     && (!last_token_was_op || ops.last().is_some_and(|x| *x == BinOperation::Call))
@@ -889,6 +800,10 @@ fn consume_expression<'a>(
                 break;
             }
             TokenType::RParen => {
+                *start -= 1;
+                break;
+            }
+            TokenType::RBracket => {
                 *start -= 1;
                 break;
             }
@@ -989,6 +904,122 @@ fn consume_expression<'a>(
             "Incomplete expression {:?}",
             &tokens[*start..]
         ))),
+    }
+}
+
+/// Shunting-yard collapse args into the given operation
+fn apply_op<'a>(
+    op: &BinOperation,
+    lhs: BasedAstNode<'a>,
+    rhs: BasedAstNode<'a>,
+) -> BasedAstNode<'a> {
+    match op {
+        BinOperation::Bang => panic!("Bang is not a binary operation."),
+        BinOperation::Subscript => BinOp {
+            op: BinOperation::Subscript,
+            rhs,
+            lhs,
+        }
+        .into(),
+        BinOperation::LiteralJoinTuple => {
+            let mut els = Vec::<BasedAstNode<'a>>::new();
+            match lhs.as_ref() {
+                LiteralTuple { elements } => els.extend(elements.clone()),
+                _ => els.push(lhs),
+            };
+            LiteralTuple { elements: els }.into()
+        }
+        BinOperation::And => BinOp {
+            op: BinOperation::And,
+            lhs,
+            rhs,
+        }
+        .into(),
+        BinOperation::Or => BinOp {
+            op: BinOperation::Or,
+            lhs,
+            rhs,
+        }
+        .into(),
+        BinOperation::Call => {
+            let mut rhs = rhs;
+            if let LiteralTuple { .. } = rhs.as_ref() {
+            } else {
+                rhs = LiteralTuple {
+                    elements: vec![rhs],
+                }
+                .into();
+            };
+            FunctionCall {
+                function: lhs,
+                args_tuple: rhs,
+            }
+            .into()
+        }
+
+        BinOperation::Assign => BasedAstNode {
+            inner: Box::new(Assignment { lhs, rhs }),
+            token: None,
+        },
+        BinOperation::Mult => BinOp {
+            op: BinOperation::Mult,
+            lhs,
+            rhs,
+        }
+        .into(),
+        BinOperation::Div => BasedAstNode {
+            inner: Box::new(BinOp {
+                op: BinOperation::Div,
+                lhs,
+                rhs,
+            }),
+            token: None,
+        },
+        BinOperation::Add => BasedAstNode {
+            inner: Box::new(BinOp {
+                op: BinOperation::Add,
+                lhs,
+                rhs,
+            }),
+            token: None,
+        },
+        BinOperation::Sub => BasedAstNode {
+            inner: Box::new(BinOp {
+                op: BinOperation::Sub,
+                lhs,
+                rhs,
+            }),
+            token: None,
+        },
+        BinOperation::Eq
+        | BinOperation::NEq
+        | BinOperation::Lt
+        | BinOperation::Gt
+        | BinOperation::LEq
+        | BinOperation::GEq => BinOp { op: *op, lhs, rhs }.into(),
+    }
+}
+
+/// Operator presidence
+fn get_presidence(op: &BinOperation) -> u32 {
+    match op {
+        BinOperation::Call => 11,
+        BinOperation::Subscript => 10,
+        BinOperation::Bang => 9,
+        BinOperation::Mult => 8,
+        BinOperation::Div => 8,
+        BinOperation::Add => 5,
+        BinOperation::Sub => 5,
+        BinOperation::Eq => 4,
+        BinOperation::Lt => 4,
+        BinOperation::Gt => 4,
+        BinOperation::LEq => 4,
+        BinOperation::GEq => 4,
+        BinOperation::NEq => 4,
+        BinOperation::And => 3,
+        BinOperation::Or => 3,
+        BinOperation::LiteralJoinTuple => 2,
+        BinOperation::Assign => 1,
     }
 }
 
@@ -1332,5 +1363,18 @@ fn add1(n: int, a_tw: str) -> Cat {
         let AstNode::LiteralTuple { elements } = args_tuple.as_ref() else {
             panic!()
         };
+    }
+
+    #[test]
+    fn subscript() {
+        let toks = lexing::lex(&"a[1[a]]");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let res = consume_expression(&mut ctx, &toks, &mut 0);
+        if let Err(parse_err) = res {
+            panic!("{:?}", parse_err);
+        };
+        let ast = res.unwrap();
+        dbg!(&ast);
     }
 }

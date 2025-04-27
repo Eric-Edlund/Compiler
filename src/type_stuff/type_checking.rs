@@ -243,6 +243,7 @@ fn check_binop<'a>(
             }
             return Ok(Type::Int);
         }
+        _ => todo!()
     }
 }
 

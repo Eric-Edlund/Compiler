@@ -217,6 +217,7 @@ fn rco_expr<'a>(
                     );
                     BasedAstNode::from(EmptyParens)
                 }
+                _ => todo!()
             }
         }
         x => {

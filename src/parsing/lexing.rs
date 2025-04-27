@@ -20,6 +20,8 @@ pub enum TokenType {
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
     Let,
     Semi,
     EqAssign,
@@ -84,6 +86,8 @@ pub fn lex(buf: &dyn AsRef<[u8]>) -> Vec<Token> {
         (TokenType::RParen, Regex::new(r"\)").unwrap()),
         (TokenType::LBrace, Regex::new(r"\{").unwrap()),
         (TokenType::RBrace, Regex::new(r"\}").unwrap()),
+        (TokenType::LBracket, Regex::new(r"\[").unwrap()),
+        (TokenType::RBracket, Regex::new(r"\]").unwrap()),
         (TokenType::Semi, Regex::new(r";").unwrap()),
         (TokenType::Bang, Regex::new(r"!").unwrap()),
         (TokenType::EqCmp, Regex::new(r"==").unwrap()),
@@ -202,5 +206,15 @@ fn cat() {
         assert_eq!(tokens[20].ty, TokenType::Colon);
         assert_eq!(tokens[21].ty, TokenType::Arrow);
         assert_eq!(tokens[22].ty, TokenType::Comma);
+    }
+
+    #[test]
+    fn assignment_6() {
+        let tokens = lex(&r#"
+fn main() {
+	let x = (1, 2);
+	print(x[0]);
+}
+"#);
     }
 }
