@@ -1278,7 +1278,7 @@ fn add1(n: int, a_tw: str) -> Cat {
 {
     add(a, 1);   
     take(a);    
-    take a;    
+    // take a;    
     add((a, 1));
 }
 "#,

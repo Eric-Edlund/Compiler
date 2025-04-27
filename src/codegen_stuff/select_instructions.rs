@@ -117,54 +117,8 @@ fn si_stmt(
             function,
             ref args_tuple,
         } => {
-            let Variable { identifier } = function.as_ref() else {
-                panic!("Non identifier functions not implemented. (Or allowed?)");
-            };
-
-            let identifier = if identifier == "print" {
-                "print_int".to_string()
-            } else {
-                identifier.clone()
-            };
-
-            let LiteralTuple { elements: args } = args_tuple.as_ref() else {
-                todo!("{:?}", args_tuple)
-            };
-
-            let mut prefix = Vec::new();
-            let mut new_args = vec![];
-            for arg in args {
-                let (p, new_arg) = si_expr(arg);
-                prefix.extend(p);
-                new_args.push(new_arg);
-            }
-
-            blocks.get_mut(current_block).unwrap().extend(
-                prefix
-                    .into_iter()
-                    // Save registers
-                    .chain(
-                        CALLER_SAVED_REGISTERS
-                            .iter()
-                            .map(|reg| X86Instr::Pushq(X86Arg::Reg(reg))),
-                    )
-                    // Put args into arg registers
-                    .chain(
-                        new_args
-                            .into_iter()
-                            .zip(ARG_REGISTERS)
-                            .map(|(arg, reg)| X86Instr::Movq(arg, X86Arg::Reg(reg))),
-                    )
-                    // Call the fn
-                    .chain([X86Instr::Callq(identifier.clone())])
-                    // Restore saved regs
-                    .chain(
-                        CALLER_SAVED_REGISTERS
-                            .iter()
-                            .rev()
-                            .map(|reg| X86Instr::Popq(X86Arg::Reg(reg))),
-                    ),
-            )
+            let (instrs, _result) = si_expr(exp);
+            blocks.get_mut(current_block).unwrap().extend(instrs);
         }
         Block { stmts } => {
             let this_lead = next_label();
@@ -260,10 +214,6 @@ fn si_stmt(
         }
         Return { value } => {
             if value.is_none() {
-                blocks
-                    .get_mut(current_block)
-                    .unwrap()
-                    .extend([X86Instr::Retq]);
                 return;
             }
 
@@ -289,10 +239,7 @@ fn si_stmt(
                 _ => todo!("Function return not implemented for node type {:?}", value),
             }
 
-            blocks
-                .get_mut(current_block)
-                .unwrap()
-                .extend([X86Instr::Retq]);
+            // The retq gets added later after stack teardown
         }
         x => panic!("Si_statment not implemented for {:?}", x),
     }
@@ -394,6 +341,62 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
                 _ => todo!("{:?}", op),
             });
             (instrs, tmp)
+        }
+        FunctionCall { function, args_tuple } => {
+            let Variable { identifier } = function.as_ref() else {
+                panic!("Non identifier functions not implemented. (Or allowed?)");
+            };
+
+            let identifier = if identifier == "print" {
+                "print_int".to_string()
+            } else {
+                format!("{}_stack_setup", identifier)
+            };
+
+            let LiteralTuple { elements: args } = args_tuple.as_ref() else {
+                todo!("{:?}", args_tuple)
+            };
+
+            let mut prefix = Vec::new();
+            let mut new_args = vec![];
+            for arg in args {
+                let (p, new_arg) = si_expr(arg);
+                prefix.extend(p);
+                new_args.push(new_arg);
+            }
+
+            let res_var = X86Arg::Var(new_var_name());
+            let mut instrs = vec![];
+            instrs.extend(
+                prefix
+                    .into_iter()
+                    // Save registers
+                    .chain(
+                        CALLER_SAVED_REGISTERS
+                            .iter()
+                            .map(|reg| X86Instr::Pushq(X86Arg::Reg(reg))),
+                    )
+                    // Put args into arg registers
+                    .chain(
+                        new_args
+                            .into_iter()
+                            .zip(ARG_REGISTERS)
+                            .map(|(arg, reg)| X86Instr::Movq(arg, X86Arg::Reg(reg))),
+                    )
+                    // Call the fn
+                    .chain([
+                        X86Instr::Callq(identifier.clone()),
+                        X86Instr::Movq(X86Arg::Reg("rax"), res_var.clone()),
+                    ])
+                    // Restore saved regs
+                    .chain(
+                        CALLER_SAVED_REGISTERS
+                            .iter()
+                            .rev()
+                            .map(|reg| X86Instr::Popq(X86Arg::Reg(reg))),
+                    ),
+            );
+            (instrs, res_var)
         }
         _ => todo!("Unimplemented si_expr {:?}", *exp.as_ref()),
     }

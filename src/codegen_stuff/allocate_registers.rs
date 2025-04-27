@@ -1,7 +1,6 @@
 use super::x86::{X86Arg, X86Function, X86Instr, X86Program, CALLEE_SAVED_REGISTERS};
 use core::fmt;
-use std::collections::{HashMap, HashSet};
-
+use std::{cell::RefCell, collections::{HashMap, HashSet}};
 
 #[derive(Default, Clone, Debug)]
 struct ProgramPointMetadata {
@@ -58,20 +57,45 @@ fn allocate_registers_function(function: &mut X86Function, no_registers: bool) {
         extend_interference_graph(&mut interference_graph, &live_sets);
     }
 
+    dbg!(&interference_graph);
+
     let coloring = disjoint_coloring(&interference_graph);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
+    dbg!(&coloring);
     let variable_homes = assign_homes(&coloring, no_registers);
+    dbg!(&variable_homes);
     assert_eq!(coloring.len(), variable_homes.len());
 
     for (label, block) in &mut function.blocks {
-        for instr in block {
+        *block = block.clone().into_iter().filter_map(|instr| {
+            let try_discard = RefCell::new(false);
+            let mut instr = instr.clone();
             instr.transform_args(|arg| {
                 use X86Arg::*;
                 if let Var(name) = arg {
-                    *arg = variable_homes.get(name).unwrap_or_else(|| panic!("Missing key: {}", &name)).clone();
+                    *arg = variable_homes
+                        .get(name)
+                        // If a variable was not assigned a home, it must have never
+                        // been live and it's value is a discardable byproduct.
+                        .unwrap_or_else(|| {
+                            *try_discard.borrow_mut() = true;
+                            arg
+                        })
+                        .clone();
                 }
-            })
-        }
+            });
+            if *try_discard.borrow() {
+                // Hopefully, the instruction's only write is to
+                // that variable and so we can drop it entirely.
+                let writes = writes_of(&instr);
+                for var in writes {
+                    assert!(!variable_homes.contains_key(var));
+                }
+                None
+            } else {
+                Some(instr)
+            }
+        }).collect();
     }
     function.stack_size = variable_homes
         .values()
@@ -81,7 +105,7 @@ fn allocate_registers_function(function: &mut X86Function, no_registers: bool) {
     if function.stack_size % 16 == 1 {
         function.stack_size += 8;
     }
-    function.stack_size += 16// TODO: Why is this necessary?
+    function.stack_size += 16 // TODO: Why is this necessary?
 }
 
 // Improve the partial solution's approximation of the live after sets.
@@ -92,7 +116,7 @@ fn live_set_pass<'b, 'a: 'b>(
 ) {
     for (label, block) in &function.blocks {
         let mut program_pts = ctx.program_pts.get_mut(label).unwrap().clone();
-        // program_pts.first_mut().unwrap().live = HashSet::from_iter(["hi".to_string()]);
+        // program_pts.first_mut().unwrap().live = HashSet::from_iter();
         for (i, pt) in program_pts.iter_mut().skip(1).enumerate().rev() {
             let next_instr: &'a X86Instr = &block[i];
             let values_discarded: HashSet<String> = writes_of(next_instr)
@@ -183,7 +207,7 @@ where
         let last = set.len() - 1;
         while first < last {
             let a = vars[first];
-            for b in &vars[first+1..=last] {
+            for b in &vars[first + 1..=last] {
                 graph.add(a, b);
             }
             first += 1;
@@ -309,8 +333,8 @@ fn writes_of(instr: &X86Instr) -> Vec<&str> {
         Pushq(reg) => vec![],
         Popq(deref) => as_var(deref),
         Addq(val, rd) => as_var(rd),
-        Subq (val, rd) => as_var(rd),
-        Imulq (a, rd ) => as_var(rd),
+        Subq(val, rd) => as_var(rd),
+        Imulq(a, rd) => as_var(rd),
         Cmpq { .. } => vec![],
         Movq(src, rd) => as_var(rd),
         Movzbq(src, rd) => as_var(rd),

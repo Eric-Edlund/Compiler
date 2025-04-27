@@ -26,7 +26,7 @@ pub enum X86Arg {
 }
 
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum X86Instr {
     Comment(String),
     /// Destination register is always last
@@ -131,7 +131,7 @@ impl X86Instr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct X86Function {
     pub name: String,
     pub lead_block: String,

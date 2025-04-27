@@ -148,7 +148,7 @@ fn rco_expr<'a>(
         Variable { .. } | LiteralNumber(_) | LiteralBool(_) => unit.clone(),
         LiteralTuple { elements } => {
             let new_elements = elements
-                .into_iter()
+                .iter()
                 .map(|arg| rco_expr(arg, new_stmts))
                 .collect();
 
@@ -161,6 +161,7 @@ fn rco_expr<'a>(
             function,
             args_tuple,
         } => {
+            assert!(matches!(args_tuple.as_ref(), LiteralTuple{..}));
             let new_args = rco_expr(args_tuple, new_stmts);
 
             FunctionCall {
