@@ -6,11 +6,12 @@ use crate::parsing::{
 };
 use AstNode::*;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Type<'a> {
     Unit,
     Int,
     Bool,
+    Tuple(Vec<Type<'a>>),
     Callable(&'a Type<'a>, &'a Type<'a>),
     Unimplemented,
 }
@@ -74,7 +75,9 @@ fn top_lvl_check_stmt<'a>(
     scope: &mut ScopeChain<Type<'a>>,
 ) -> TypeCheckResult<Type<'a>> {
     match stmt.as_ref() {
-        FunctionDecl { identifier, body, ..} => {
+        FunctionDecl {
+            identifier, body, ..
+        } => {
             // TODO: Type check fns
             let duplicate = scope.add(identifier, Type::Unit);
             if duplicate {
@@ -115,7 +118,15 @@ fn check_expr<'a>(
         }
         EmptyParens => Ok(Type::Unit),
         Return { .. } => Ok(Type::Unit),
-        LiteralTuple { .. } => todo!(),
+        LiteralTuple { elements } => {
+            let mut el_types = vec![];
+            for el in elements {
+                let t = check_expr(el, scope)?;
+                el_types.push(t);
+            }
+
+            Ok(Type::Tuple(el_types))
+        },
         Variable { identifier } => {
             return check_variable(stmt, scope);
         }
@@ -138,13 +149,18 @@ fn check_expr<'a>(
             }
             return Ok(Type::Unit);
         }
-        FunctionCall { function, args_tuple: args } => {
+        FunctionCall {
+            function,
+            args_tuple: args,
+        } => {
             let Type::Callable(args, res) = check_expr(function, scope)? else {
                 return Err("Can only call values of type Callable.".to_string());
             };
-            return Ok(*res);
+            return Ok(res.clone());
         }
-        FunctionDecl { identifier, body, .. } => {
+        FunctionDecl {
+            identifier, body, ..
+        } => {
             let duplicate = scope.add(
                 identifier,
                 Type::Callable(&Type::Unimplemented, &Type::Unit),
@@ -173,20 +189,19 @@ fn check_expr<'a>(
 fn check_unaryop<'a>(
     op: &BinOperation,
     expr: &BasedAstNode,
-    scope: &mut ScopeChain<Type<'a>>
+    scope: &mut ScopeChain<Type<'a>>,
 ) -> TypeCheckResult<Type<'a>> {
     use BinOperation::*;
     match op {
         Bang => {
             let expr_t = check_expr(expr, scope)?;
             if expr_t != Type::Bool {
-                return Err("! can only be applied to booleans.".to_string())
+                return Err("! can only be applied to booleans.".to_string());
             }
-            return Ok(Type::Bool)
+            return Ok(Type::Bool);
         }
-        x => panic!("Why is {:?} in a not node?", expr)
+        x => panic!("Why is {:?} in a not node?", expr),
     }
-
 }
 
 fn check_binop<'a>(
@@ -207,7 +222,7 @@ fn check_binop<'a>(
                 return Err("'and' and 'or' keywords only work with bool arguments.".to_string());
             }
 
-            return Ok(Type::Bool)
+            return Ok(Type::Bool);
         }
         Eq | Gt | GEq | NEq | Lt | LEq => {
             let lhs_t = check_expr(lhs, scope)?;
@@ -243,7 +258,7 @@ fn check_binop<'a>(
             }
             return Ok(Type::Int);
         }
-        _ => todo!()
+        _ => todo!(),
     }
 }
 
@@ -255,7 +270,7 @@ fn check_variable<'a>(
         Variable { identifier } => {
             let t = scope.resolve(identifier);
             match t {
-                Some(t) => Ok(*t),
+                Some(t) => Ok(t.clone()),
                 None => Err(format!("Unrecognized symbol {}", &identifier)),
             }
         }
