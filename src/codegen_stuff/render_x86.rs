@@ -17,6 +17,22 @@ pub fn render(program: &X86Program) -> Vec<u8> {
             }
         }
     }
+
+    res.extend("
+allocate:
+  movq free_ptr(%rip), %rax
+  addq %rdi, %rax
+  movq %rdi, %rsi
+  cmpq fromspace_end(%rip), %rax
+  jl allocate_alloc
+  movq %r15, %rdi
+  callq collect
+  jmp allocate_alloc
+allocate_alloc:
+  movq free_ptr(%rip), %rax
+  addq %rsi, free_ptr(%rip)
+  retq
+".bytes());
     res
 }
 

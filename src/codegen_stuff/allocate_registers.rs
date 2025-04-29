@@ -57,13 +57,9 @@ fn allocate_registers_function(function: &mut X86Function, no_registers: bool) {
         extend_interference_graph(&mut interference_graph, &live_sets);
     }
 
-    dbg!(&interference_graph);
-
     let coloring = disjoint_coloring(&interference_graph);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
-    dbg!(&coloring);
     let variable_homes = assign_homes(&coloring, no_registers);
-    dbg!(&variable_homes);
     assert_eq!(coloring.len(), variable_homes.len());
 
     for (label, block) in &mut function.blocks {

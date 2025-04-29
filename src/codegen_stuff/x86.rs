@@ -2,7 +2,7 @@ use ordered_hash_map::OrderedHashMap;
 use std::collections::HashMap;
 
 pub const GENERAL_PURPOSE_REGISTERS: &[&str] = &[
-    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
+    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r12", "r13", "r14",
 ];
 pub const CALLER_SAVED_REGISTERS: &[&str] = &[
     "rax", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"
@@ -14,6 +14,7 @@ pub const ARG_REGISTERS: &[&str] = &[
     "rdi", "rsi", "rdx", "rcx"
 ];
 // Notice that r15 is not available here, it's for the gc stack base pointer.
+// Reserved r11 for temporary tuple stuff
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum X86Arg {

@@ -310,6 +310,24 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             instrs.push(X86Instr::Imulq(res2, tmp.clone()));
             (instrs, tmp)
         }
+        BinOp {
+            op: BinOperation::Subscript,
+            lhs,
+            rhs,
+        } => {
+            let tmp = X86Arg::Var(new_var_name());
+            let (prefix, tuple_ptr) = si_expr(lhs);
+            let (prefix2, literal_offset) = si_expr(rhs);
+            let X86Arg::Imm(offset) = literal_offset else {
+                todo!("Non-literal tuple subscript.");
+            };
+            let mut instrs = vec![];
+            instrs.extend(prefix);
+            instrs.push(X86Instr::Movq(tuple_ptr, X86Arg::Reg("r11")));
+            instrs.extend(prefix2);
+            instrs.push(X86Instr::Movq(X86Arg::Deref("r11", offset as i32), tmp.clone()));
+            (instrs, tmp)
+        }
         BinOp { op, lhs, rhs } => {
             let (prefix, res1) = si_expr(lhs);
             let (prefix2, res2) = si_expr(rhs);
@@ -342,7 +360,10 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             });
             (instrs, tmp)
         }
-        FunctionCall { function, args_tuple } => {
+        FunctionCall {
+            function,
+            args_tuple,
+        } => {
             let Variable { identifier } = function.as_ref() else {
                 panic!("Non identifier functions not implemented. (Or allowed?)");
             };
@@ -397,6 +418,53 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
                     ),
             );
             (instrs, res_var)
+        }
+        LiteralTuple { elements } => {
+            let mut instrs = vec![];
+            let mut tuple_vals: Vec<X86Arg> = vec![];
+            for el in elements {
+                let (prefix, tmp) = si_expr(el);
+                instrs.extend(prefix);
+                tuple_vals.push(tmp);
+            }
+
+            let mut tag: u64 = 0;
+            // Pointer mask
+            for i in 0..50 {
+                tag <<= 1;
+                tag += 0;
+            }
+            // tuple length
+            tag <<= 6;
+            tag += tuple_vals.len() as u64;
+
+            // Indicator bit which the gc uses at runtime
+            tag <<= 1;
+            tag += 1;
+
+            let tuple_ptr = new_var_name();
+            instrs.extend([
+                // Space to allocate on the heap including tag
+                X86Instr::Movq(
+                    X86Arg::Imm((elements.len() as u64 + 1) * 8),
+                    X86Arg::Reg("rdi"),
+                ),
+                X86Instr::Callq("allocate".to_string()),
+                X86Instr::Movq(X86Arg::Reg("rax"), X86Arg::Reg("r11")),
+                // Tuple gc tag
+                X86Instr::Movq(X86Arg::Imm(tag), X86Arg::Deref("r11", 0)),
+            ]);
+            instrs.extend(
+                tuple_vals
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, val)| X86Instr::Movq(val, X86Arg::Deref("r11", (i as i32 + 1) * 8))),
+            );
+            instrs.extend([
+                X86Instr::Movq(X86Arg::Reg("r11"), X86Arg::Var(tuple_ptr.clone())),
+            ]);
+
+            (instrs, X86Arg::Var(tuple_ptr))
         }
         _ => todo!("Unimplemented si_expr {:?}", *exp.as_ref()),
     }
