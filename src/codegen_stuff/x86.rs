@@ -139,6 +139,7 @@ pub struct X86Function {
     pub tail_block: String,
     pub blocks: OrderedHashMap<String, Vec<X86Instr>>,
     pub stack_size: u32,
+    pub root_stack_size: u32,
 }
 
 impl X86Function {

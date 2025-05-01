@@ -86,6 +86,7 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
         tail_block: this_tail.clone(),
         blocks,
         stack_size: 0,
+        root_stack_size: 0,
     }
 }
 

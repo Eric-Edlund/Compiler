@@ -61,16 +61,18 @@ async fn main() {
     if_debug(format!("Program Text:\n\n{}\n", str::from_utf8(&buf).unwrap()));
 
     let mut parsed_file = build_ast(buf, |prb| {println!("Parse error: {:?}", prb); exit(1)});
-    let _ = type_check(&parsed_file);
+    let _ = type_check(&parsed_file).expect("Failed type check.");
     if_debug(format!("Passed Type Check."));
 
     if_debug(format!("Parsed AST:\n\n{:?}\n", parsed_file.asts));
     remove_complex_operands(&mut parsed_file);
     if_debug(format!("RCO:\n\n{:?}\n", parsed_file.asts));
+    let tuple_vars = type_check(&parsed_file).expect("Failed type check.");
 
+    // This pass preserves variable names
     let mut x86_program = select_instructions(&parsed_file);
     if_debug(format!("Select Instructions:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
-    allocate_registers(&mut x86_program, args.no_registers);
+    allocate_registers(&mut x86_program, args.no_registers, &tuple_vars);
     wrap_functions_with_stack_logic(&mut x86_program);
     if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     prelude_and_conclusion(&mut x86_program);

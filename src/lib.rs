@@ -41,10 +41,11 @@ pub fn compile_program(src: &str, config: &CompilationConfig) -> CompileResult {
     type_res?;
 
     remove_complex_operands(&mut parsed_file);
+    let tuple_vars = type_check(&parsed_file)?;
     explicate_control(&mut parsed_file);
 
     let mut x86_program = select_instructions(&parsed_file);
-    allocate_registers(&mut x86_program, config.no_registers);
+    allocate_registers(&mut x86_program, config.no_registers, &tuple_vars);
     // if_debug(format!("Allocate Registers:\n\n{}\n", String::from_utf8(render(&x86_program)).unwrap()));
     wrap_functions_with_stack_logic(&mut x86_program);
     prelude_and_conclusion(&mut x86_program);

@@ -1,6 +1,9 @@
 use super::x86::{X86Arg, X86Function, X86Instr, X86Program, CALLEE_SAVED_REGISTERS};
 use core::fmt;
-use std::{cell::RefCell, collections::{HashMap, HashSet}};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
 
 #[derive(Default, Clone, Debug)]
 struct ProgramPointMetadata {
@@ -20,13 +23,21 @@ struct PartialSolution {
 /// The program is currently in pseudo x86 because it has variables.
 /// In this pass we remove variables, replacing them with either
 /// registers or stack references.
-pub fn allocate_registers(program: &mut X86Program, no_registers: bool) {
+pub fn allocate_registers(
+    program: &mut X86Program,
+    no_registers: bool,
+    tuple_vars: &HashSet<String>,
+) {
     for (name, function) in &mut program.functions {
-        allocate_registers_function(function, no_registers)
+        allocate_registers_function(function, no_registers, tuple_vars)
     }
 }
 
-fn allocate_registers_function(function: &mut X86Function, no_registers: bool) {
+fn allocate_registers_function(
+    function: &mut X86Function,
+    no_registers: bool,
+    tuple_vars: &HashSet<String>,
+) {
     let mut solution = PartialSolution {
         program_pts: HashMap::new(),
     };
@@ -59,49 +70,72 @@ fn allocate_registers_function(function: &mut X86Function, no_registers: bool) {
 
     let coloring = disjoint_coloring(&interference_graph);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
-    let variable_homes = assign_homes(&coloring, no_registers);
+    let (variable_homes, tuple_homes) = assign_homes(&coloring, no_registers, tuple_vars);
     assert_eq!(coloring.len(), variable_homes.len());
 
     for (label, block) in &mut function.blocks {
-        *block = block.clone().into_iter().filter_map(|instr| {
-            let try_discard = RefCell::new(false);
-            let mut instr = instr.clone();
-            instr.transform_args(|arg| {
-                use X86Arg::*;
-                if let Var(name) = arg {
-                    *arg = variable_homes
-                        .get(name)
-                        // If a variable was not assigned a home, it must have never
-                        // been live and it's value is a discardable byproduct.
-                        .unwrap_or_else(|| {
-                            *try_discard.borrow_mut() = true;
-                            arg
-                        })
-                        .clone();
+        *block = block
+            .clone()
+            .into_iter()
+            .filter_map(|instr| {
+                let try_discard = RefCell::new(false);
+                let mut instr = instr.clone();
+                instr.transform_args(|arg| {
+                    use X86Arg::*;
+                    if let Var(name) = arg {
+                        if tuple_homes.contains_key(name) {
+                            *arg = tuple_homes
+                                .get(name)
+                                // If a variable was not assigned a home, it must have never
+                                // been live and it's value is a discardable byproduct.
+                                .unwrap_or_else(|| {
+                                    *try_discard.borrow_mut() = true;
+                                    arg
+                                })
+                                .clone();
+                        } else {
+                            *arg = variable_homes
+                                .get(name)
+                                // If a variable was not assigned a home, it must have never
+                                // been live and it's value is a discardable byproduct.
+                                .unwrap_or_else(|| {
+                                    *try_discard.borrow_mut() = true;
+                                    arg
+                                })
+                                .clone();
+                        }
+                    }
+                });
+                if *try_discard.borrow() {
+                    // Hopefully, the instruction's only write is to
+                    // that variable and so we can drop it entirely.
+                    let writes = writes_of(&instr);
+                    for var in writes {
+                        assert!(!variable_homes.contains_key(var));
+                    }
+                    None
+                } else {
+                    Some(instr)
                 }
-            });
-            if *try_discard.borrow() {
-                // Hopefully, the instruction's only write is to
-                // that variable and so we can drop it entirely.
-                let writes = writes_of(&instr);
-                for var in writes {
-                    assert!(!variable_homes.contains_key(var));
-                }
-                None
-            } else {
-                Some(instr)
-            }
-        }).collect();
+            })
+            .collect();
     }
     function.stack_size = variable_homes
         .values()
         .filter(|home| matches!(home, X86Arg::Deref(_, _)))
         .count() as u32;
     function.stack_size *= 8;
-    if function.stack_size % 16 == 1 {
+    if function.stack_size % 16 != 0 {
         function.stack_size += 8;
     }
-    function.stack_size += 16 // TODO: Why is this necessary?
+    function.stack_size += 16; // TODO: Why is this necessary?
+    
+    function.root_stack_size = tuple_homes
+        .values()
+        .count() as u32 * 8;
+    if function.root_stack_size % 16 != 0 {
+        function.root_stack_size += 8;
+    }
 }
 
 // Improve the partial solution's approximation of the live after sets.
@@ -247,22 +281,51 @@ fn disjoint_coloring(graph: &InterferenceGraph) -> HashMap<&str, Color> {
     result
 }
 
-fn assign_homes(coloring: &HashMap<&str, Color>, no_registers: bool) -> HashMap<String, X86Arg> {
-    let mut vars: Vec<(Color, &str)> = coloring
-        .iter()
-        .map(|(name, color)| (*color, *name))
-        .collect();
-    vars.sort_by_key(|x| x.0);
-    let vars: Vec<&str> = vars.into_iter().map(|x| x.1).collect();
+/// Takes a set of variable names assigned to colors and creates an assignment from
+/// variable names to either registers or derefs.
+///
+/// Returns (var homes, tuple var homes)
+fn assign_homes(
+    coloring: &HashMap<&str, Color>,
+    no_registers: bool,
+    tuple_var_names: &HashSet<String>,
+) -> (HashMap<String, X86Arg>, HashMap<String, X86Arg>) {
+    let mut vars: Vec<(&str, Color)> = vec![];
+    let mut tuple_vars: Vec<(&str, Color)> = vec![];
+    for (name, color) in coloring {
+        if tuple_var_names.contains(&name.to_string()) {
+            tuple_vars.push((*name, *color));
+        } else {
+            vars.push((*name, *color))
+        }
+    }
+    vars.sort_by_key(|x| x.1);
+    tuple_vars.sort_by_key(|x| x.1);
+    let vars: Vec<&str> = vars.into_iter().map(|x| x.0).collect();
 
+    // Assign regular var homes
     let reg_homes_iter = CALLEE_SAVED_REGISTERS
         .iter()
         .skip_while(|_| no_registers)
         .map(|reg_name| X86Arg::Reg(reg_name));
-    let stack_homes_iter = (0..).map(|offset| X86Arg::Deref("rbp", (offset + 1) * -8));
+    let stack_homes_iter = (0..).map(|offset| X86Arg::Deref("rbp", -8 * (offset + 1)));
     let available_homes = reg_homes_iter.chain(stack_homes_iter);
 
-    HashMap::from_iter(vars.into_iter().map(|x| x.to_string()).zip(available_homes))
+    let var_homes =
+        HashMap::from_iter(vars.into_iter().map(|x| x.to_string()).zip(available_homes));
+
+    // Assign tuples homes on the root stack
+    let tuple_vars: Vec<&str> = tuple_vars.into_iter().map(|x| x.0).collect();
+    let root_stack_positions = (0..).map(|offset| X86Arg::Deref("r15", -8 * (offset + 1)));
+
+    let tuple_var_homes = HashMap::from_iter(
+        tuple_vars
+            .into_iter()
+            .zip(root_stack_positions)
+            .map(|(name, arg)| (name.to_string(), arg)),
+    );
+
+    (var_homes, tuple_var_homes)
 }
 
 // X86 Helpers

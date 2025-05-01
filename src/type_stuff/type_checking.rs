@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::parsing::{
     parsing::{AstNode, BasedAstNode, BinOperation},
@@ -56,23 +56,26 @@ impl<'a, T> ScopeChain<'a, T> {
     }
 }
 
-pub fn type_check(file: &FileAnal) -> Result<(), Vec<String>> {
+/// Returns a list of variables storing tuples
+pub fn type_check(file: &FileAnal) -> Result<HashSet<String>, Vec<String>> {
+    let mut tuple_vars = HashSet::<String>::new();
     let file_scope = ScopeChain::<Type>::new();
     let mut errors = Vec::<String>::new();
     for construct in &file.asts {
         let mut construct_scope = file_scope.subscope();
-        let res = top_lvl_check_stmt(construct, &mut construct_scope);
+        let res = top_lvl_check_stmt(construct, &mut construct_scope, &mut tuple_vars);
         if let Err(msg) = res {
             errors.push(msg)
         }
     }
 
-    Ok(())
+    Ok(tuple_vars)
 }
 
 fn top_lvl_check_stmt<'a>(
     stmt: &BasedAstNode,
     scope: &mut ScopeChain<Type<'a>>,
+    tuple_vars: &mut HashSet<String>,
 ) -> TypeCheckResult<Type<'a>> {
     match stmt.as_ref() {
         FunctionDecl {
@@ -84,7 +87,7 @@ fn top_lvl_check_stmt<'a>(
                 return Err(format!("Duplicate identifier: {}", identifier));
             }
 
-            return check_expr(body, scope);
+            return check_expr(body, scope, tuple_vars);
         }
         _ => todo!(),
     }
@@ -93,10 +96,11 @@ fn top_lvl_check_stmt<'a>(
 fn check_expr<'a>(
     stmt: &BasedAstNode,
     scope: &mut ScopeChain<Type<'a>>,
+    tuple_vars: &mut HashSet<String>,
 ) -> TypeCheckResult<Type<'a>> {
     match stmt.as_ref() {
         WhileStmt { condition, .. } => {
-            let condition_t = check_expr(condition, scope)?;
+            let condition_t = check_expr(condition, scope, tuple_vars)?;
             if condition_t != Type::Bool {
                 return Err(format!(
                     "Condition in while statement must have type bool, not {:?}",
@@ -106,7 +110,7 @@ fn check_expr<'a>(
             Ok(Type::Unit)
         }
         IfStmt { condition, .. } => {
-            let condition_t = check_expr(condition, scope)?;
+            let condition_t = check_expr(condition, scope, tuple_vars)?;
             if condition_t != Type::Bool {
                 return Err(format!(
                     "Condition in if statement must have type bool, not {:?}",
@@ -121,7 +125,7 @@ fn check_expr<'a>(
         LiteralTuple { elements } => {
             let mut el_types = vec![];
             for el in elements {
-                let t = check_expr(el, scope)?;
+                let t = check_expr(el, scope, tuple_vars)?;
                 el_types.push(t);
             }
 
@@ -132,7 +136,14 @@ fn check_expr<'a>(
         }
         Assignment { lhs, rhs } => {
             let lhs_t = check_variable(lhs, scope)?;
-            let rhs_t = check_expr(rhs, scope)?;
+            let rhs_t = check_expr(rhs, scope, tuple_vars)?;
+
+            if matches!(rhs_t, Type::Tuple(..)) {
+                let AstNode::Variable{identifier} = lhs.as_ref() else {
+                    todo!()
+                };
+                tuple_vars.insert(identifier.clone());
+            }
 
             if lhs_t != rhs_t {
                 return Err(format!(
@@ -145,7 +156,7 @@ fn check_expr<'a>(
         }
         Block { stmts } => {
             for stmt in stmts {
-                check_expr(stmt, scope)?;
+                check_expr(stmt, scope, tuple_vars)?;
             }
             return Ok(Type::Unit);
         }
@@ -153,7 +164,7 @@ fn check_expr<'a>(
             function,
             args_tuple: args,
         } => {
-            let Type::Callable(args, res) = check_expr(function, scope)? else {
+            let Type::Callable(args, res) = check_expr(function, scope, tuple_vars)? else {
                 return Err("Can only call values of type Callable.".to_string());
             };
             return Ok(res.clone());
@@ -173,13 +184,13 @@ fn check_expr<'a>(
         LiteralNumber(_) => return Ok(Type::Int),
         LiteralBool(_) => return Ok(Type::Bool),
         Not(expr) => {
-            return check_unaryop(&BinOperation::Bang, expr, scope);
+            return check_unaryop(&BinOperation::Bang, expr, scope, tuple_vars);
         }
         BinOp { op, lhs, rhs } => {
-            return check_binop(op, lhs, rhs, scope);
+            return check_binop(op, lhs, rhs, scope, tuple_vars);
         }
         Declaration { identifier, rhs } => {
-            let rhs_t = check_expr(rhs, scope)?;
+            let rhs_t = check_expr(rhs, scope, tuple_vars)?;
 
             return Ok(Type::Unit);
         }
@@ -190,11 +201,12 @@ fn check_unaryop<'a>(
     op: &BinOperation,
     expr: &BasedAstNode,
     scope: &mut ScopeChain<Type<'a>>,
+    tuple_vars: &mut HashSet<String>,
 ) -> TypeCheckResult<Type<'a>> {
     use BinOperation::*;
     match op {
         Bang => {
-            let expr_t = check_expr(expr, scope)?;
+            let expr_t = check_expr(expr, scope, tuple_vars)?;
             if expr_t != Type::Bool {
                 return Err("! can only be applied to booleans.".to_string());
             }
@@ -209,14 +221,15 @@ fn check_binop<'a>(
     lhs: &BasedAstNode,
     rhs: &BasedAstNode,
     scope: &mut ScopeChain<Type<'a>>,
+    tuple_vars: &mut HashSet<String>,
 ) -> TypeCheckResult<Type<'a>> {
     use BinOperation::*;
     match op {
         Bang => panic!("Why is bang in a binop node?"),
         LiteralJoinTuple => panic!("This shouldn't have escaped the parsing code."),
         And | Or => {
-            let lhs_t = check_expr(lhs, scope)?;
-            let rhs_t = check_expr(rhs, scope)?;
+            let lhs_t = check_expr(lhs, scope, tuple_vars)?;
+            let rhs_t = check_expr(rhs, scope, tuple_vars)?;
 
             if lhs_t != Type::Bool || rhs_t != Type::Bool {
                 return Err("'and' and 'or' keywords only work with bool arguments.".to_string());
@@ -225,8 +238,8 @@ fn check_binop<'a>(
             return Ok(Type::Bool);
         }
         Eq | Gt | GEq | NEq | Lt | LEq => {
-            let lhs_t = check_expr(lhs, scope)?;
-            let rhs_t = check_expr(rhs, scope)?;
+            let lhs_t = check_expr(lhs, scope, tuple_vars)?;
+            let rhs_t = check_expr(rhs, scope, tuple_vars)?;
 
             match lhs_t {
                 Type::Bool | Type::Int => {}
@@ -248,8 +261,8 @@ fn check_binop<'a>(
             return Ok(Type::Unit);
         }
         Mult | Div | Add | Sub => {
-            let lhs_t = check_expr(lhs, scope)?;
-            let rhs_t = check_expr(rhs, scope)?;
+            let lhs_t = check_expr(lhs, scope, tuple_vars)?;
+            let rhs_t = check_expr(rhs, scope, tuple_vars)?;
             if lhs_t != Type::Int || rhs_t != Type::Int {
                 return Err(format!(
                     "{:?} is only supported between int types, not {:?} {:?}",
