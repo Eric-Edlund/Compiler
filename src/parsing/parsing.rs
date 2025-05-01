@@ -776,8 +776,7 @@ fn consume_expression<'a>(
                         token: Some(&tokens[*start]),
                     }
                 } else {
-                    let r = consume_expression(ctx, tokens, start)?;
-                    r
+                    consume_expression(ctx, tokens, start)?
                 };
 
                 let TokenType::RParen = tokens[*start].ty else {
@@ -925,7 +924,7 @@ fn apply_op<'a>(
             let mut els = Vec::<BasedAstNode<'a>>::new();
             match lhs.as_ref() {
                 LiteralTuple { elements } => els.extend(elements.clone()),
-                _ => els.push(lhs),
+                _ => els.extend([lhs, rhs]),
             };
             LiteralTuple { elements: els }.into()
         }
@@ -1340,6 +1339,7 @@ fn add1(n: int, a_tw: str) -> Cat {
         let AstNode::LiteralTuple { elements } = args_tuple.as_ref() else {
             panic!()
         };
+        assert_eq!(elements.len(), 2);
 
         let AstNode::FunctionCall {
             function,
