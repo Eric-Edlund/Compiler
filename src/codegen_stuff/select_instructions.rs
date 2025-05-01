@@ -319,9 +319,11 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             let tmp = X86Arg::Var(new_var_name());
             let (prefix, tuple_ptr) = si_expr(lhs);
             let (prefix2, literal_offset) = si_expr(rhs);
-            let X86Arg::Imm(offset) = literal_offset else {
+            let X86Arg::Imm(mut offset) = literal_offset else {
                 todo!("Non-literal tuple subscript.");
             };
+            offset += 1;
+            offset *= 8;
             let mut instrs = vec![];
             instrs.extend(prefix);
             instrs.push(X86Instr::Movq(tuple_ptr, X86Arg::Reg("r11")));
