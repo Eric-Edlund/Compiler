@@ -727,13 +727,6 @@ fn consume_expression<'a>(
         // return consume_expression
     }
 
-    fn apply_unary<'a>(op: &BinOperation, expr: BasedAstNode<'a>) -> BasedAstNode<'a> {
-        match op {
-            BinOperation::Bang => Not(expr).into(),
-            x => panic!("Bang is the only unary operator. Not {:?}", x),
-        }
-    }
-
     // Presidence climbing
     let mut exprs = Vec::<BasedAstNode>::new();
     let mut ops = Vec::<BinOperation>::new();
@@ -861,22 +854,7 @@ fn consume_expression<'a>(
             if ctx.print_changes {
                 println!("Collapsing previous lower ops: {:?}", exprs);
             }
-            let presidence = get_presidence(op);
-            while ops.last().is_some() && get_presidence(ops.last().unwrap()) > presidence {
-                let op = ops.pop().unwrap();
-                if ctx.print_changes {
-                    println!("Applying op {:?}", op);
-                }
-
-                let a = exprs.pop().unwrap();
-                let e = if op == BinOperation::Bang {
-                    apply_unary(&op, a)
-                } else {
-                    let b = exprs.pop().unwrap();
-                    apply_op(&op, b, a)
-                };
-                exprs.push(e);
-            }
+            shunting_yard_collapse(ctx, Some(op), &mut ops, &mut exprs);
             ops.push(*op);
             if ctx.print_changes {
                 println!("Expr stack is now {:?}", exprs);
@@ -885,7 +863,33 @@ fn consume_expression<'a>(
     }
 
     // Apply remaining ops in order
-    while let Some(op) = ops.pop() {
+    shunting_yard_collapse(ctx, None, &mut ops, &mut exprs);
+
+    ctx.stack.pop();
+    match exprs.pop() {
+        Some(e) => Ok(e),
+        None => Err(ParseError::other(format!(
+            "Incomplete expression {:?}",
+            &tokens[*start..]
+        ))),
+    }
+}
+
+/// Collapse the ops and exprs stacks where the operation has a lower prescident
+/// than the given op.
+fn shunting_yard_collapse(
+    ctx: &Context,
+    op: Option<&BinOperation>,
+    ops: &mut Vec<BinOperation>,
+    exprs: &mut Vec<BasedAstNode>,
+) {
+    let presidence = op.map(get_presidence).unwrap_or(0);
+    while ops.last().is_some() && get_presidence(ops.last().unwrap()) > presidence {
+        let op = ops.pop().unwrap();
+        if ctx.print_changes {
+            println!("Applying op {:?}", op);
+        }
+
         let a = exprs.pop().unwrap();
         let e = if op == BinOperation::Bang {
             apply_unary(&op, a)
@@ -895,14 +899,12 @@ fn consume_expression<'a>(
         };
         exprs.push(e);
     }
+}
 
-    ctx.stack.pop();
-    match exprs.pop() {
-        Some(e) => Ok(e),
-        None => Err(ParseError::other(format!(
-            "Incomplete expression {:?}",
-            &tokens[*start..]
-        ))),
+fn apply_unary<'a>(op: &BinOperation, expr: BasedAstNode<'a>) -> BasedAstNode<'a> {
+    match op {
+        BinOperation::Bang => Not(expr).into(),
+        x => panic!("Bang is the only unary operator. Not {:?}", x),
     }
 }
 
@@ -1366,7 +1368,7 @@ fn add1(n: int, a_tw: str) -> Cat {
     }
 
     #[test]
-    fn subscript() {
+    fn subscript_1() {
         let toks = lexing::lex(&"a[1[a]]");
         let mut ctx = Context::new();
         ctx.print_changes = true;
@@ -1376,5 +1378,36 @@ fn add1(n: int, a_tw: str) -> Cat {
         };
         let ast = res.unwrap();
         dbg!(&ast);
+    }
+
+    #[test]
+    fn subscript_2() {
+        let toks = lexing::lex(&"a[1][2]");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let res = consume_expression(&mut ctx, &toks, &mut 0);
+        if let Err(parse_err) = res {
+            panic!("{:?}", parse_err);
+        };
+        let ast = res.unwrap();
+        dbg!(&ast);
+
+        let AstNode::BinOp {
+            op: BinOperation::Subscript,
+            lhs,
+            rhs,
+        } = ast.as_ref()
+        else {
+            panic!();
+        };
+
+        let AstNode::BinOp {
+            op: BinOperation::Subscript,
+            lhs,
+            rhs,
+        } = lhs.as_ref()
+        else {
+            panic!();
+        };
     }
 }
