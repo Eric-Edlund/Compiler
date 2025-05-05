@@ -74,6 +74,7 @@ fn render_expr(arg: &X86Arg) -> String {
     match arg {
         X86Arg::Reg(name) => format!("%{}", name),
         X86Arg::Var(name) => name.to_string(),
+        X86Arg::GlobalVal(name) => name.to_string(),
         X86Arg::Imm(value) => format!("${}", value),
         X86Arg::Label(name) => name.to_string(),
         X86Arg::Deref(reg, offset) => format!("{}(%{})", offset, reg),

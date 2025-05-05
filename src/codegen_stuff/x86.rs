@@ -24,6 +24,7 @@ pub enum X86Arg {
     Deref(&'static str, i32),
     // Pseudo assembly
     Var(String),
+    GlobalVal(String),
 }
 
 #[non_exhaustive]
@@ -138,7 +139,9 @@ pub struct X86Function {
     pub lead_block: String,
     pub tail_block: String,
     pub blocks: OrderedHashMap<String, Vec<X86Instr>>,
+    /// Bytes
     pub stack_size: u32,
+    /// Bytes
     pub root_stack_size: u32,
 }
 

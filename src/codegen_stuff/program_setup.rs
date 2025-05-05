@@ -1,5 +1,5 @@
-use std::iter::empty;
 use super::x86::{X86Arg, X86Instr, X86Program, CALLEE_SAVED_REGISTERS};
+use std::iter::empty;
 use X86Arg::*;
 use X86Instr::*;
 
@@ -17,8 +17,16 @@ pub fn wrap_functions_with_stack_logic(program: &mut X86Program) {
                     Pushq(Reg("rbp")),
                     // Update the base pointer to the current stack pointer
                     Movq(Reg("rsp"), Reg("rbp")),
+                    // Mark stack space for the function
                     Subq(Imm(func.stack_size as u64), Reg("rsp")),
                 ])
+                // Allocate root stack frame, zeroing spaces for the gc
+                .chain((0..func.root_stack_size).step_by(8).flat_map(|offset| {
+                    [
+                        Movq(Imm(0), Deref("r15", 0)),
+                        Addq(Imm(8), Deref("r15", 0)),
+                    ]
+                }))
                 // Save callee saved regs
                 .chain(
                     CALLEE_SAVED_REGISTERS
@@ -38,6 +46,8 @@ pub fn wrap_functions_with_stack_logic(program: &mut X86Program) {
                         .iter()
                         .map(|reg| X86Instr::Popq(X86Arg::Reg(reg))),
                 )
+                // Teardown root stack frame
+                .chain([Addq(Imm(func.root_stack_size as u64), Reg("r15"))])
                 // Teardown stack frame
                 .chain([
                     Addq(Imm(func.stack_size as u64), Reg("rsp")),
@@ -58,22 +68,12 @@ pub fn prelude_and_conclusion(program: &mut X86Program) {
     entry_fn.prefix_block_mut((
         "main".to_string(),
         vec![
-            // For some reason the registers start with initial junk values.
-            // Movq(Imm(0), Reg("rsi")),
-            // Movq(Imm(0), Reg("rdi")),
-            // Movq(Imm(0), Reg("rax")),
-            // Movq(Imm(0), Reg("rbx")),
-            // Movq(Imm(0), Reg("rcx")),
-            // Movq(Imm(0), Reg("rdx")),
-            // Movq(Imm(0), Reg("r8")),
-            // Movq(Imm(0), Reg("r9")),
-            // Movq(Imm(0), Reg("r10")),
-            // Movq(Imm(0), Reg("r11")),
-            // Movq(Imm(0), Reg("r12")),
-            // Movq(Imm(0), Reg("r13")),
-            // Movq(Imm(0), Reg("r14")),
-            // Movq(Imm(0), Reg("r15")),
-            // Jmp(entry_fn.lead_block.clone()),
+            // TODO: How large should the root stack be?
+            Movq(Imm(4096), Reg("rdi")),
+            // TODO: How large should the heap be?
+            Movq(Imm(4049), Reg("rsi")),
+            Callq("initialize".to_string()),
+            Movq(GlobalVal("rootstack_begin".to_string()), Reg("r15")),
         ],
     ));
 }
