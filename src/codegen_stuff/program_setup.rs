@@ -69,9 +69,9 @@ pub fn prelude_and_conclusion(program: &mut X86Program) {
         "main".to_string(),
         vec![
             // TODO: How large should the root stack be?
-            Movq(Imm(4096), Reg("rdi")),
+            Movq(Imm(2_u64.pow(14)), Reg("rdi")),
             // TODO: How large should the heap be?
-            Movq(Imm(4049), Reg("rsi")),
+            Movq(Imm(2_u64.pow(4)), Reg("rsi")),
             Callq("initialize".to_string()),
             Movq(GlobalVal("rootstack_begin".to_string()), Reg("r15")),
         ],
