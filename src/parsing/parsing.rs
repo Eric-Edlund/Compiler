@@ -875,7 +875,7 @@ fn consume_expression<'a>(
     }
 }
 
-/// Collapse the ops and exprs stacks where the operation has a lower prescident
+/// Collapse the ops and exprs stacks where the operation has a lower precident
 /// than the given op.
 fn shunting_yard_collapse(
     ctx: &Context,
@@ -883,6 +883,7 @@ fn shunting_yard_collapse(
     ops: &mut Vec<BinOperation>,
     exprs: &mut Vec<BasedAstNode>,
 ) {
+    // assert!(ops.len() + op.map(|_| 1).unwrap_or(0) > exprs.len());
     let presidence = op.map(get_presidence).unwrap_or(0);
     while ops.last().is_some() && get_presidence(ops.last().unwrap()) > presidence {
         let op = ops.pop().unwrap();
@@ -890,14 +891,42 @@ fn shunting_yard_collapse(
             println!("Applying op {:?}", op);
         }
 
-        let a = exprs.pop().unwrap();
-        let e = if op == BinOperation::Bang {
-            apply_unary(&op, a)
+        let rhs = exprs.pop().unwrap();
+        let mut lhs: Option<BasedAstNode> = None;
+
+        // Before we get here, the ops are put on the stack from left to right.
+        // This ordering is not the correct application order for subscript.
+        // If we built the ast with this order we get:
+        //
+        //  a[1][2] => subscript(a, subscript(1, 2))
+        //
+        // If this op is a subscript, greedily take subscript ops and exprs off
+        // the stacks and build them in the correct order.
+        //
+        if matches!(op, BinOperation::Subscript) {
+            let mut subscript_exprs = vec![exprs.pop().expect("Program error")];
+            while let Some(BinOperation::Subscript) = ops.last() {
+                ops.pop().unwrap();
+                subscript_exprs.push(exprs.pop().unwrap());
+            }
+
+            if !subscript_exprs.is_empty() {
+                let mut partial = subscript_exprs.pop().unwrap();
+                while let Some(rhs) = subscript_exprs.pop() {
+                    partial = apply_op(&BinOperation::Subscript, partial.clone(), rhs);
+                }
+
+                lhs = Some(partial)
+            }
+        }
+
+        let result = if op == BinOperation::Bang {
+            apply_unary(&op, rhs)
         } else {
-            let b = exprs.pop().unwrap();
-            apply_op(&op, b, a)
+            lhs = lhs.or_else(|| exprs.pop());
+            apply_op(&op, lhs.unwrap().clone(), rhs)
         };
-        exprs.push(e);
+        exprs.push(result);
     }
 }
 
@@ -1001,7 +1030,7 @@ fn apply_op<'a>(
     }
 }
 
-/// Operator presidence
+/// Operator presidence, > 0
 fn get_presidence(op: &BinOperation) -> u32 {
     match op {
         BinOperation::Call => 11,
@@ -1390,7 +1419,9 @@ fn add1(n: int, a_tw: str) -> Cat {
             panic!("{:?}", parse_err);
         };
         let ast = res.unwrap();
+        println!();
         dbg!(&ast);
+        println!();
 
         let AstNode::BinOp {
             op: BinOperation::Subscript,
@@ -1407,7 +1438,7 @@ fn add1(n: int, a_tw: str) -> Cat {
             rhs,
         } = lhs.as_ref()
         else {
-            panic!();
+            panic!("{:?}", lhs);
         };
     }
 }
