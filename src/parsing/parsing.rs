@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -27,8 +28,8 @@ pub enum BinOperation {
 
 #[derive(Clone, Debug)]
 pub struct FnParameter<'a> {
-    name: &'a str,
-    ty: Option<&'a str>,
+    pub name: &'a str,
+    pub ty: Option<&'a str>,
 }
 
 #[derive(Clone)]
@@ -51,7 +52,7 @@ pub enum AstNode<'a> {
         stmts: Vec<BasedAstNode<'a>>,
     },
     Declaration {
-        identifier: &'a str,
+        identifier: Cow<'a, str>,
         rhs: BasedAstNode<'a>,
     },
     Assignment {
@@ -116,7 +117,6 @@ impl AstNode<'_> {
             Self::BinOp { op, lhs, rhs } => {
                 f.write_str("(")?;
                 lhs.as_ref().fmt_pretty(indent, f)?;
-                println!("{:?} {:?}, {:?}", lhs, rhs, op);
                 f.write_str(&format!(" {:?} ", op))?;
                 rhs.as_ref().fmt_pretty(indent, f)?;
                 f.write_str(")")
@@ -702,7 +702,7 @@ fn consume_declaration<'a>(
 
     Ok(BasedAstNode::<'a> {
         inner: Box::new(Declaration {
-            identifier: &ident_tok.src,
+            identifier: Cow::Borrowed(&ident_tok.src),
             rhs,
         }),
         token: Some(ident_tok),

@@ -61,13 +61,15 @@ async fn main() {
     if_debug(format!("Program Text:\n\n{}\n", str::from_utf8(&buf).unwrap()));
 
     let mut parsed_file = build_ast(buf, |prb| {println!("Parse error: {:?}", prb); exit(1)});
-    let _ = type_check(&parsed_file).expect("Failed type check.");
-    if_debug(format!("Passed Type Check."));
+    let tuple_vars = type_check(&parsed_file).expect("Failed type check.");
+    if_debug(format!("Tuple Variables: {:?}", tuple_vars));
+    if_debug(format!("Passed Type Check.\n"));
 
     if_debug(format!("Parsed AST:\n\n{:?}\n", parsed_file.asts));
     remove_complex_operands(&mut parsed_file);
     if_debug(format!("RCO:\n\n{:?}\n", parsed_file.asts));
     let tuple_vars = type_check(&parsed_file).expect("Failed type check.");
+    if_debug(format!("Tuple Variables: {:?}\n", tuple_vars));
 
     // This pass preserves variable names
     let mut x86_program = select_instructions(&parsed_file);

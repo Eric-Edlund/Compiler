@@ -1,6 +1,7 @@
 use crate::parsing::parsing::{AstNode::*, BinOperation};
 use crate::parsing::{parsing::BasedAstNode, FileAnal};
 use lazy_static::lazy_static;
+use std::borrow::Cow;
 use std::{ops::DerefMut, sync::Mutex};
 
 lazy_static! {
@@ -147,18 +148,15 @@ fn rco_expr<'a>(
     match unit.as_ref() {
         Variable { .. } | LiteralNumber(_) | LiteralBool(_) => unit.clone(),
         LiteralTuple { elements } => {
-            let tmp: BasedAstNode = Variable {
-                identifier: temp_var_sym(),
-            }
-            .into();
+            let tmp = temp_var_sym();
             let new_elements = elements
                 .iter()
                 .map(|arg| rco_expr(arg, new_stmts))
                 .collect();
 
             new_stmts.push(
-                Assignment {
-                    lhs: tmp.clone(),
+                Declaration {
+                    identifier: Cow::Owned(tmp.clone()),
                     rhs: LiteralTuple {
                         elements: new_elements,
                     }
@@ -167,7 +165,10 @@ fn rco_expr<'a>(
                 .into(),
             );
 
-            tmp
+            Variable {
+                identifier: tmp,
+            }
+            .into()
         }
         FunctionCall {
             function,
@@ -190,18 +191,18 @@ fn rco_expr<'a>(
         }
         Not(expr) => {
             let expr = rco_expr(expr, new_stmts);
-            let tmp: BasedAstNode = Variable {
-                identifier: temp_var_sym(),
-            }
-            .into();
+            let tmp = temp_var_sym();
             new_stmts.push(
-                Assignment {
-                    lhs: tmp.clone(),
+                Declaration {
+                    identifier: Cow::Owned(tmp),
                     rhs: Not(expr).into(),
                 }
                 .into(),
             );
-            tmp
+            Variable {
+                identifier: temp_var_sym(),
+            }
+            .into()
         }
         BinOp { lhs, rhs, op } => {
             use BinOperation::*;
@@ -211,18 +212,16 @@ fn rco_expr<'a>(
                 Eq | LEq | GEq | Gt | Lt | NEq | Add | Sub | Mult | Div | Call | And | Or => {
                     let lhs = rco_expr(lhs, new_stmts);
                     let rhs = rco_expr(rhs, new_stmts);
-                    let tmp: BasedAstNode = Variable {
-                        identifier: temp_var_sym(),
-                    }
-                    .into();
+                    let tmp = temp_var_sym();
+
                     new_stmts.push(
-                        Assignment {
-                            lhs: tmp.clone(),
+                        Declaration {
+                            identifier: Cow::Owned(tmp.clone()),
                             rhs: BasedAstNode::from(BinOp { lhs, rhs, op: *op }.clone()),
                         }
                         .into(),
                     );
-                    tmp
+                    Variable { identifier: tmp }.into()
                 }
                 Assign => {
                     let rhs = rco_expr(rhs, new_stmts);
@@ -233,25 +232,21 @@ fn rco_expr<'a>(
                         }
                         .into(),
                     );
-                    BasedAstNode::from(EmptyParens)
+                    EmptyParens.into()
                 }
                 Subscript => {
                     let lhs = rco_expr(lhs, new_stmts);
                     let rhs = rco_expr(rhs, new_stmts);
-                    let tmp: BasedAstNode = Variable {
-                        identifier: temp_var_sym(),
-                    }
-                    .into();
+                    let tmp = temp_var_sym();
                     new_stmts.push(
-                        Assignment {
-                            lhs: tmp.clone(),
+                        Declaration {
+                            identifier: Cow::Owned(tmp.clone()),
                             rhs: BinOp { lhs, rhs, op: *op }.into(),
                         }
                         .into(),
                     );
-                    tmp
+                    Variable { identifier: tmp }.into()
                 }
-                _ => todo!("{:?}", op),
             }
         }
         x => {
