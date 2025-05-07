@@ -147,22 +147,40 @@ fn rco_expr<'a>(
     match unit.as_ref() {
         Variable { .. } | LiteralNumber(_) | LiteralBool(_) => unit.clone(),
         LiteralTuple { elements } => {
+            let tmp: BasedAstNode = Variable {
+                identifier: temp_var_sym(),
+            }
+            .into();
             let new_elements = elements
                 .iter()
                 .map(|arg| rco_expr(arg, new_stmts))
                 .collect();
 
-            LiteralTuple {
-                elements: new_elements,
-            }
-            .into()
+            new_stmts.push(
+                Assignment {
+                    lhs: tmp.clone(),
+                    rhs: LiteralTuple {
+                        elements: new_elements,
+                    }
+                    .into(),
+                }
+                .into(),
+            );
+
+            tmp
         }
         FunctionCall {
             function,
             args_tuple,
         } => {
-            assert!(matches!(args_tuple.as_ref(), LiteralTuple { .. }));
-            let new_args = rco_expr(args_tuple, new_stmts);
+            let LiteralTuple { elements } = args_tuple.as_ref() else {
+                panic!();
+            };
+            let mut args = vec![];
+            for arg in elements {
+                args.push(rco_expr(arg, new_stmts));
+            }
+            let new_args = LiteralTuple { elements: args }.into();
 
             FunctionCall {
                 function: function.clone(),
@@ -222,15 +240,12 @@ fn rco_expr<'a>(
                     let rhs = rco_expr(rhs, new_stmts);
                     let tmp: BasedAstNode = Variable {
                         identifier: temp_var_sym(),
-                    }.into();
+                    }
+                    .into();
                     new_stmts.push(
                         Assignment {
                             lhs: tmp.clone(),
-                            rhs: BinOp {
-                                lhs,
-                                rhs,
-                                op: *op,
-                            }.into(),
+                            rhs: BinOp { lhs, rhs, op: *op }.into(),
                         }
                         .into(),
                     );

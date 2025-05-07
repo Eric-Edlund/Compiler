@@ -378,7 +378,7 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
             };
 
             let LiteralTuple { elements: args } = args_tuple.as_ref() else {
-                todo!("{:?}", args_tuple)
+                panic!("Function Parameter set must be a tuple. Found {:?}", args_tuple)
             };
 
             let mut prefix = Vec::new();

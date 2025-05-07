@@ -1441,4 +1441,31 @@ fn add1(n: int, a_tw: str) -> Cat {
             panic!("{:?}", lhs);
         };
     }
+
+    #[test]
+    fn function_call_has_args_tuple() {
+        let toks = lexing::lex(&"add(a[1][2])");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let res = consume_expression(&mut ctx, &toks, &mut 0);
+        if let Err(parse_err) = res {
+            panic!("{:?}", parse_err);
+        };
+        let ast = res.unwrap();
+        println!();
+        dbg!(&ast);
+        println!();
+
+        let AstNode::FunctionCall {
+            function,
+            args_tuple,
+        } = ast.as_ref()
+        else {
+            panic!();
+        };
+
+        let AstNode::LiteralTuple { elements } = args_tuple.as_ref() else {
+            panic!("{:?}", args_tuple);
+        };
+    }
 }

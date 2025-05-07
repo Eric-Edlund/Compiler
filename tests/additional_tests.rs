@@ -4,6 +4,7 @@ use utils::test_files;
 
 const TESTS: &[&str] = &[
     include_str!("./assignments/additional/not.l"),
+    include_str!("./assignments/additional/anonymous_subtuple.l"),
 ];
 
 #[test]
