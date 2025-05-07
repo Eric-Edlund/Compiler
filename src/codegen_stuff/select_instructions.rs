@@ -453,6 +453,7 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
                     X86Arg::Reg("rdi"),
                 ),
                 X86Instr::Callq("allocate".to_string()),
+                X86Instr::Movq(X86Arg::Reg("rax"), X86Arg::Var(tuple_ptr.clone())),
                 X86Instr::Movq(X86Arg::Reg("rax"), X86Arg::Reg("r11")),
                 // Tuple gc tag
                 X86Instr::Movq(X86Arg::Imm(tag), X86Arg::Deref("r11", 0)),
@@ -463,9 +464,6 @@ fn si_expr(exp: &BasedAstNode) -> (Vec<X86Instr>, X86Arg) {
                     .enumerate()
                     .map(|(i, val)| X86Instr::Movq(val, X86Arg::Deref("r11", (i as i32 + 1) * 8))),
             );
-            instrs.extend([
-                X86Instr::Movq(X86Arg::Reg("r11"), X86Arg::Var(tuple_ptr.clone())),
-            ]);
 
             (instrs, X86Arg::Var(tuple_ptr))
         }

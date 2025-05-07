@@ -1,4 +1,4 @@
-// {"compiles": true, "stdout": "42\n"}
+// {"compiles": true, "stdout": "1\n"}
 
 fn main() {
 	let x = (42, (1, 2));
