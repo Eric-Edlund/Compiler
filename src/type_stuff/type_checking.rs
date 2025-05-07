@@ -65,7 +65,10 @@ pub fn type_check(file: &FileAnal) -> Result<HashSet<String>, Vec<String>> {
     let mut errors = Vec::<String>::new();
 
     // Seed scope
-    file_scope.add("print", Type::Callable(vec![Type::Int], Box::new(Type::Unit)));
+    file_scope.add(
+        "print",
+        Type::Callable(vec![Type::Int], Box::new(Type::Unit)),
+    );
 
     // Top level pass for signatures
     let mut defined_functions = HashMap::<String, Type>::new();
@@ -85,7 +88,6 @@ pub fn type_check(file: &FileAnal) -> Result<HashSet<String>, Vec<String>> {
     // Check function bodies
     for construct in &file.asts {
         if let FunctionDecl { identifier, .. } = construct.as_ref() {
-            dbg!(&construct);
             let mut func_scope = file_scope.subscope();
             let res = check_func_body(construct, &mut func_scope, &mut tuple_vars);
             if let Err(msg) = res {
@@ -95,7 +97,7 @@ pub fn type_check(file: &FileAnal) -> Result<HashSet<String>, Vec<String>> {
     }
 
     if !errors.is_empty() {
-        return Err(errors)
+        return Err(errors);
     }
 
     Ok(tuple_vars)
@@ -190,18 +192,28 @@ fn check_expr(
     tuple_vars: &mut HashSet<String>,
 ) -> TypeCheckResult<(Type, Type)> {
     match stmt.as_ref() {
-        WhileStmt { condition, .. } => {
-            let (condition_t, ret_t) = check_expr(condition, scope, tuple_vars)?;
+        WhileStmt {
+            condition,
+            begin_blk,
+            body_blk,
+        } => {
+            let (_, _) = check_expr(begin_blk, scope, tuple_vars)?;
+            let (condition_t, _) = check_expr(condition, scope, tuple_vars)?;
             if condition_t != Type::Bool {
                 return Err(format!(
                     "Condition in while statement must have type bool, not {:?}",
                     condition_t
                 ));
             }
+            let (_, ret_t) = check_expr(body_blk, scope, tuple_vars)?;
             Ok((Type::Unit, ret_t))
         }
-        IfStmt { condition, .. } => {
-            let (condition_t, ret_t) = check_expr(condition, scope, tuple_vars)?;
+        IfStmt {
+            condition,
+            then_blk,
+            else_blk,
+        } => {
+            let (condition_t, _) = check_expr(condition, scope, tuple_vars)?;
             if condition_t != Type::Bool {
                 return Err(format!(
                     "Condition in if statement must have type bool, not {:?}",
@@ -209,7 +221,16 @@ fn check_expr(
                 ));
             }
 
-            Ok((Type::Unit, ret_t))
+            let (_, mut ret_ty) = check_expr(then_blk, scope, tuple_vars)?;
+            if let Some(else_blk) = else_blk {
+                let (_, else_ret_ty) = check_expr(else_blk, scope, tuple_vars)?;
+                if ret_ty != else_ret_ty && ret_ty != Type::Unit && else_ret_ty != Type::Unit {
+                    return Err(format!("Incompatible return types in if statement."));
+                }
+                ret_ty = else_ret_ty;
+            }
+
+            Ok((Type::Unit, ret_ty))
         }
         EmptyParens => Ok((Type::Unit, Type::Unit)),
         Return { value } => {
@@ -219,7 +240,7 @@ fn check_expr(
                 let ret_ty = check_expr(value.as_ref().unwrap(), scope, tuple_vars)?;
                 Ok((Type::Unit, ret_ty.0))
             }
-        },
+        }
         LiteralTuple { elements } => {
             let mut el_types = vec![];
             for el in elements {
@@ -258,7 +279,10 @@ fn check_expr(
             for stmt in stmts {
                 let (exp_t, ret_t) = check_expr(stmt, scope, tuple_vars)?;
                 if ret_t != block_ret_t && block_ret_t != Type::Unit {
-                    return Err(format!("Incompatible return types: {:?}, {:?}", ret_t, block_ret_t))
+                    return Err(format!(
+                        "Incompatible return types: {:?}, {:?}",
+                        ret_t, block_ret_t
+                    ));
                 }
                 block_ret_t = ret_t;
             }
@@ -285,7 +309,10 @@ fn check_expr(
         LiteralNumber(_) => return Ok((Type::Int, Type::Unit)),
         LiteralBool(_) => return Ok((Type::Bool, Type::Unit)),
         Not(expr) => {
-            return Ok((check_unaryop(&BinOperation::Bang, expr, scope, tuple_vars)?, Type::Unit));
+            return Ok((
+                check_unaryop(&BinOperation::Bang, expr, scope, tuple_vars)?,
+                Type::Unit,
+            ));
         }
         BinOp { op, lhs, rhs } => {
             return Ok((check_binop(op, lhs, rhs, scope, tuple_vars)?, Type::Unit));
@@ -381,21 +408,25 @@ fn check_binop(
             let (rhs_t, _) = check_expr(rhs, scope, tuple_vars)?;
 
             if rhs_t != Type::Int {
-                return Err(format!("Tuple subscripts must be integers."))
+                return Err(format!("Tuple subscripts must be integers."));
             }
 
             let LiteralNumber(offset) = rhs.as_ref() else {
-                return Err(format!("Tuple subscripts must be integer literals."))
+                return Err(format!("Tuple subscripts must be integer literals."));
             };
 
             let Type::Tuple(args) = lhs_t else {
-                return Err(format!("Only tuple types can be subscripted."))
+                return Err(format!("Only tuple types can be subscripted."));
             };
 
             if *offset < 0 || args.len() <= *offset as usize {
-                return Err(format!("Tuple index {} is out of range {}.", offset, args.len()))
+                return Err(format!(
+                    "Tuple index {} is out of range {}.",
+                    offset,
+                    args.len()
+                ));
             }
-            return Ok(args.get(*offset as usize).unwrap().clone())
+            return Ok(args.get(*offset as usize).unwrap().clone());
         }
     }
 }

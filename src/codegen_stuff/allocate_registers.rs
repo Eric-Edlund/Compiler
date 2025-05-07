@@ -71,7 +71,7 @@ fn allocate_registers_function(
     let coloring = disjoint_coloring(&interference_graph);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
     let (variable_homes, tuple_homes) = assign_homes(&coloring, no_registers, tuple_vars);
-    assert_eq!(coloring.len(), variable_homes.len());
+    assert_eq!(coloring.len(), variable_homes.len() + tuple_homes.len());
 
     for (label, block) in &mut function.blocks {
         *block = block

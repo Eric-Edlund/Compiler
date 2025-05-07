@@ -194,13 +194,13 @@ fn rco_expr<'a>(
             let tmp = temp_var_sym();
             new_stmts.push(
                 Declaration {
-                    identifier: Cow::Owned(tmp),
+                    identifier: Cow::Owned(tmp.clone()),
                     rhs: Not(expr).into(),
                 }
                 .into(),
             );
             Variable {
-                identifier: temp_var_sym(),
+                identifier: tmp,
             }
             .into()
         }
