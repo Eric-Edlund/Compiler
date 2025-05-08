@@ -55,6 +55,10 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
     }
 }
 
+struct Context {
+    function_conclusion: String,
+}
+
 fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     use AstNode::*;
     let FunctionDecl {
@@ -76,7 +80,10 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     );
 
     let mut curr = this_lead.clone();
-    si_stmt(body, &mut curr, &mut blocks);
+    let ctx = Context {
+        function_conclusion: this_tail.clone(),
+    };
+    si_stmt(&ctx, body, &mut curr, &mut blocks);
 
     blocks
         .get_mut(&curr)
@@ -98,6 +105,7 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
 /// This function is responsible for ensuring that all paths lead back to
 /// the tail block.
 fn si_stmt(
+    ctx: &Context,
     exp: &BasedAstNode,
     current_block: &mut String,
     blocks: &mut OrderedHashMap<String, Vec<X86Instr>>,
@@ -129,7 +137,7 @@ fn si_stmt(
         Block { stmts } => {
             let this_lead = next_label();
             for stmt in stmts {
-                si_stmt(stmt, current_block, blocks);
+                si_stmt(ctx, stmt, current_block, blocks);
             }
         }
         IfStmt {
@@ -154,7 +162,7 @@ fn si_stmt(
 
             *current_block = then_label.clone();
             blocks.insert(then_label.clone(), Vec::new());
-            si_stmt(then_blk, current_block, blocks);
+            si_stmt(ctx, then_blk, current_block, blocks);
             blocks
                 .get_mut(current_block)
                 .unwrap()
@@ -163,7 +171,7 @@ fn si_stmt(
             if let Some(else_blk) = else_blk {
                 blocks.insert(else_label.clone(), Vec::new());
                 *current_block = else_label.clone();
-                si_stmt(else_blk, current_block, blocks);
+                si_stmt(ctx, else_blk, current_block, blocks);
                 blocks
                     .get_mut(current_block)
                     .unwrap()
@@ -190,7 +198,7 @@ fn si_stmt(
 
             blocks.insert(begin_label.clone(), vec![]);
             *current_block = begin_label.clone();
-            si_stmt(begin_blk, current_block, blocks);
+            si_stmt(ctx, begin_blk, current_block, blocks);
             blocks.get_mut(current_block).unwrap().extend([
                 X86Instr::Comment("proceed to while check".to_string()),
                 X86Instr::Jmp(check_label.clone()),
@@ -209,7 +217,7 @@ fn si_stmt(
 
             blocks.insert(body_label.clone(), vec![]);
             *current_block = body_label.clone();
-            si_stmt(body_blk, current_block, blocks);
+            si_stmt(ctx, body_blk, current_block, blocks);
             blocks.get_mut(current_block).unwrap().extend([
                 X86Instr::Comment("To while begin".to_string()),
                 X86Instr::Jmp(begin_label.clone()),
@@ -232,7 +240,10 @@ fn si_stmt(
                 LiteralNumber(n) => blocks
                     .get_mut(current_block)
                     .unwrap()
-                    .extend([X86Instr::Movq(X86Arg::Imm(*n as u64), X86Arg::Reg("rax"))]),
+                    .extend([
+                        X86Instr::Movq(X86Arg::Imm(*n as u64), X86Arg::Reg("rax")),
+                        X86Instr::Jmp(ctx.function_conclusion.clone()),
+                    ]),
                 Variable { identifier } => {
                     blocks
                         .get_mut(current_block)

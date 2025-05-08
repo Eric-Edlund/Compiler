@@ -903,8 +903,8 @@ fn shunting_yard_collapse(
         // If this op is a subscript, greedily take subscript ops and exprs off
         // the stacks and build them in the correct order.
         //
-        if matches!(op, BinOperation::Subscript) {
-            let mut subscript_exprs = vec![exprs.pop().expect("Program error")];
+        if op == BinOperation::Subscript {
+            let mut subscript_exprs = vec![exprs.pop().expect("Compiler error")];
             while let Some(BinOperation::Subscript) = ops.last() {
                 ops.pop().unwrap();
                 subscript_exprs.push(exprs.pop().unwrap());
@@ -920,6 +920,31 @@ fn shunting_yard_collapse(
             }
         }
 
+        // Tuples are constructed with "," being the "tuple join" operator.
+        // A result is that (1, 2, 3) is parsed into (1, (2, 3)) which is incorrect.
+        // It's also ambigious with actual (1, (2, 3)) which isn't great so we
+        // have to fix it here instead of in another pass.
+        //
+        // If the current op is tuple join, grab all the tuple joins now.
+        //
+        if op == BinOperation::LiteralJoinTuple {
+            let mut tuple_els = vec![exprs.pop().expect("Compiler error")];
+            while let Some(BinOperation::LiteralJoinTuple) = ops.last() {
+                ops.pop().unwrap();
+                tuple_els.push(exprs.pop().unwrap());
+            }
+            tuple_els.reverse();
+            tuple_els.push(rhs);
+            exprs.push(
+                LiteralTuple {
+                    elements: tuple_els,
+                }
+                .into(),
+            );
+            return;
+        }
+
+        assert_ne!(op, BinOperation::LiteralJoinTuple);
         let result = if op == BinOperation::Bang {
             apply_unary(&op, rhs)
         } else {
@@ -1467,5 +1492,29 @@ fn add1(n: int, a_tw: str) -> Cat {
         let AstNode::LiteralTuple { elements } = args_tuple.as_ref() else {
             panic!("{:?}", args_tuple);
         };
+    }
+
+    #[test]
+    fn three_component_tuples() {
+        let toks = lexing::lex(&"(1, 2, 3, 4)");
+        let mut ctx = Context::new();
+        ctx.print_changes = true;
+        let res = consume_expression(&mut ctx, &toks, &mut 0);
+        if let Err(parse_err) = res {
+            panic!("{:?}", parse_err);
+        };
+        let ast = res.unwrap();
+        println!();
+        dbg!(&ast);
+        println!();
+
+        let AstNode::LiteralTuple { elements } = ast.as_ref() else {
+            panic!();
+        };
+
+        assert!(matches!(*elements[0].inner, AstNode::LiteralNumber(1)));
+        assert!(matches!(*elements[1].inner, AstNode::LiteralNumber(2)));
+        assert!(matches!(*elements[2].inner, AstNode::LiteralNumber(3)));
+        assert!(matches!(*elements[3].inner, AstNode::LiteralNumber(4)));
     }
 }
