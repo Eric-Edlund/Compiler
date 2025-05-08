@@ -16,7 +16,6 @@ pub mod codegen_stuff;
 use codegen_stuff::render_x86::render;
 use codegen_stuff::patch_instructions::patch_instructions;
 use parsing::build_ast;
-use ast_stuff::explicate_control::explicate_control;
 use ast_stuff::rco::remove_complex_operands;
 use codegen_stuff::allocate_registers::allocate_registers;
 use codegen_stuff::program_setup::{prelude_and_conclusion, wrap_functions_with_stack_logic};
@@ -42,7 +41,6 @@ pub fn compile_program(src: &str, config: &CompilationConfig) -> CompileResult {
 
     remove_complex_operands(&mut parsed_file);
     let tuple_vars = type_check(&parsed_file)?;
-    explicate_control(&mut parsed_file);
 
     let mut x86_program = select_instructions(&parsed_file);
     allocate_registers(&mut x86_program, config.no_registers, &tuple_vars);
