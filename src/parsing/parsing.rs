@@ -27,9 +27,15 @@ pub enum BinOperation {
 }
 
 #[derive(Clone, Debug)]
+pub enum TypeAnnotation {
+    Simple(String),
+    Tuple(Vec<TypeAnnotation>)
+}
+
+#[derive(Clone, Debug)]
 pub struct FnParameter<'a> {
     pub name: &'a str,
-    pub ty: Option<&'a str>,
+    pub ty: Option<TypeAnnotation>,
 }
 
 #[derive(Clone)]
@@ -37,7 +43,7 @@ pub enum AstNode<'a> {
     FunctionDecl {
         identifier: &'a str,
         args: Vec<FnParameter<'a>>,
-        ret_ty: Option<&'a str>,
+        ret_ty: Option<TypeAnnotation>,
         body: BasedAstNode<'a>,
     },
     LiteralNumber(i32),
@@ -510,7 +516,7 @@ fn consume_function_params_list<'a>(
                 if tok.ty != TokenType::Identifier {
                     return Err(ParseError::other("Types must be lexically identifiers."));
                 }
-                params.last_mut().unwrap().ty = Some(&tok.src);
+                params.last_mut().unwrap().ty = Some(TypeAnnotation::Simple(tok.src.clone()));
                 state = Comma;
                 *start += 1;
             }
@@ -528,11 +534,11 @@ fn consume_function_params_list<'a>(
 }
 
 /// Starts with token after )
-fn consume_function_ret_type<'a>(
+fn consume_function_ret_type(
     ctx: &mut Context,
-    tokens: &'a [Token],
+    tokens: &[Token],
     next: &mut usize,
-) -> PResult<Option<&'a str>> {
+) -> PResult<Option<TypeAnnotation>> {
     let Some(tok) = tokens.get(*next) else {
         return Ok(None);
     };
@@ -543,17 +549,27 @@ fn consume_function_ret_type<'a>(
     let Some(type_tok) = tokens.get(*next + 1) else {
         return Ok(None);
     };
+    *next += 1;
 
-    if type_tok.ty != TokenType::Identifier {
-        return Err(ParseError::unexpected(
-            type_tok,
-            "Expecting type name identifier",
-            Some(TokenType::Identifier),
-        ));
+    let ret_annotation = consume_expression(ctx, tokens, next)?;
+    match ret_annotation.as_ref() {
+        AstNode::Variable { identifier } => {
+            return Ok(Some(TypeAnnotation::Simple(identifier.clone())))
+        }
+        AstNode::LiteralTuple { elements } => {
+            return Ok(Some(
+                TypeAnnotation::Tuple(
+                    elements.iter().map(|member| {
+                        let AstNode::Variable { identifier } = member.as_ref() else {
+                            todo!("Err gracefully when we have more time")
+                        };
+                        TypeAnnotation::Simple(identifier.clone())
+                    }).collect()
+                )
+            ))
+        }
+        _ => todo!("Err gracefully")
     }
-    *next += 2;
-
-    return Ok(Some(type_tok.src.as_str()));
 }
 
 /// start should be the first token to consume, probably {

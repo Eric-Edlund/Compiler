@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::parsing::{
-    parsing::{AstNode, BasedAstNode, BinOperation},
+    parsing::{AstNode, BasedAstNode, BinOperation, TypeAnnotation},
     FileAnal,
 };
 use AstNode::*;
@@ -103,11 +103,20 @@ pub fn type_check(file: &FileAnal) -> Result<HashSet<String>, Vec<String>> {
     Ok(tuple_vars)
 }
 
-fn resolve_static_type(name: &str) -> TypeCheckResult<Type> {
-    match name {
-        "int" => Ok(Type::Int),
-        "bool" => Ok(Type::Bool),
-        _ => return Err(format!("Unrecognized type {}", name)),
+fn resolve_static_type(ann: &TypeAnnotation) -> TypeCheckResult<Type> {
+    match ann {
+        TypeAnnotation::Simple(name) => match name.as_str() {
+            "int" => Ok(Type::Int),
+            "bool" => Ok(Type::Bool),
+            _ => return Err(format!("Unrecognized type {:?}", ann)),
+        }
+        TypeAnnotation::Tuple(components) => {
+            let mut comp_ts = vec![];
+            for comp in components {
+                comp_ts.push(resolve_static_type(comp)?)
+            }
+            Ok(Type::Tuple(comp_ts))
+        }
     }
 }
 
@@ -124,7 +133,7 @@ fn function_signature(func: &BasedAstNode) -> TypeCheckResult<(String, Type)> {
 
     let mut args_t = vec![];
     for param in args {
-        match param.ty {
+        match &param.ty {
             None => {
                 return Err(format!(
                     "Parameter {} has implicity type which is not supported.",
@@ -134,7 +143,7 @@ fn function_signature(func: &BasedAstNode) -> TypeCheckResult<(String, Type)> {
             Some(ty) => args_t.push(resolve_static_type(ty)?),
         }
     }
-    let ret_ty: TypeCheckResult<Type> = ret_ty.map(resolve_static_type).unwrap_or(Ok(Type::Unit));
+    let ret_ty: TypeCheckResult<Type> = ret_ty.as_ref().map(resolve_static_type).unwrap_or(Ok(Type::Unit));
     Ok((
         identifier.to_string(),
         Type::Callable(args_t, Box::new(ret_ty?)),
@@ -158,7 +167,7 @@ fn check_func_body(
 
     let mut body_scope = scope.subscope();
     for arg in args {
-        let Some(arg_t) = arg.ty.map(resolve_static_type) else {
+        let Some(arg_t) = arg.ty.as_ref().map(resolve_static_type) else {
             return Err("Implicitly typed function parameters not implemented.".to_string());
         };
         let arg_t = arg_t?;
