@@ -58,7 +58,7 @@ pub fn select_instructions(file: &FileAnal) -> X86Program {
 fn si_func_decl(exp: &BasedAstNode) -> X86Function {
     use AstNode::*;
     let FunctionDecl {
-        identifier, body, ..
+        identifier, body, args, ..
     } = exp.as_ref()
     else {
         panic!("Expecting a function declaration.");
@@ -68,7 +68,12 @@ fn si_func_decl(exp: &BasedAstNode) -> X86Function {
 
     let this_lead = format!("{}_start", identifier);
     let this_tail = format!("{}_conclusion", identifier);
-    blocks.insert(this_lead.clone(), vec![]);
+    assert!(args.len() <= 4, "Max of 4 function parameters supported.");
+    blocks.insert(this_lead.clone(), 
+        args.iter().zip(ARG_REGISTERS).map(|(arg, reg)| {
+            X86Instr::Movq(X86Arg::Reg(reg), X86Arg::Var(arg.name.to_string()))
+        }).collect()
+    );
 
     let mut curr = this_lead.clone();
     si_stmt(body, &mut curr, &mut blocks);

@@ -5,5 +5,5 @@ fn add1(n: int) -> int {
 }
 
 fn main() {
-	print(add1(5));
+    print(add1(5));
 }

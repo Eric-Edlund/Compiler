@@ -103,6 +103,14 @@ pub fn type_check(file: &FileAnal) -> Result<HashSet<String>, Vec<String>> {
     Ok(tuple_vars)
 }
 
+fn resolve_static_type(name: &str) -> TypeCheckResult<Type> {
+    match name {
+        "int" => Ok(Type::Int),
+        "bool" => Ok(Type::Bool),
+        _ => return Err(format!("Unrecognized type {}", name)),
+    }
+}
+
 fn function_signature(func: &BasedAstNode) -> TypeCheckResult<(String, Type)> {
     let FunctionDecl {
         identifier,
@@ -113,14 +121,6 @@ fn function_signature(func: &BasedAstNode) -> TypeCheckResult<(String, Type)> {
     else {
         todo!();
     };
-
-    fn resolve_static_type(name: &str) -> TypeCheckResult<Type> {
-        match name {
-            "int" => Ok(Type::Int),
-            "bool" => Ok(Type::Bool),
-            _ => return Err(format!("Unrecognized type {}", name)),
-        }
-    }
 
     let mut args_t = vec![];
     for param in args {
@@ -147,13 +147,23 @@ fn check_func_body(
     tuple_vars: &mut HashSet<String>,
 ) -> TypeCheckResult<()> {
     let FunctionDecl {
-        identifier, body, ..
+        identifier,
+        body,
+        args,
+        ..
     } = func.as_ref()
     else {
         panic!()
     };
 
     let mut body_scope = scope.subscope();
+    for arg in args {
+        let Some(arg_t) = arg.ty.map(resolve_static_type) else {
+            return Err("Implicitly typed function parameters not implemented.".to_string());
+        };
+        let arg_t = arg_t?;
+        body_scope.add(arg.name, arg_t);
+    }
 
     let Block { .. } = body.as_ref() else {
         todo!("Non-block function bodies not implemented.")
