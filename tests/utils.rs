@@ -99,7 +99,8 @@ pub fn test_files(tests: &[&str]) {
             panic!();
         }
 
-        let c_res = compile_program(test, &COMPILATION_CONFIGS[0]);
+        // Compile the program for std out test
+        let c_res = compile_program(test, &COMPILATION_CONFIGS[1]);
         if expected_result.compiles && c_res.is_err() {
             panic!(
                 "Program fails to compile but should succeed. Compile errors: {:?}",
