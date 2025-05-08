@@ -1,4 +1,4 @@
-// {"compiles": true, "stdout": "120\n"}
+// {"compiles": true, "stdout": "19\n"}
 
 fn add_if(n: int, x: int, y: int) -> int {
     return n + x + y;

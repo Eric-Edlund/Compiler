@@ -8,8 +8,8 @@ pub const CALLER_SAVED_REGISTERS: &[&str] = &[
     "rax", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"
 ];
 pub const CALLEE_SAVED_REGISTERS: &[&str] = &[
-    "rbx", "r12", "r13", "r14"
-];
+    "rcx", "rbx", "r12", "r13", "r14"
+]; // Plus stack and base pointer ofc
 pub const ARG_REGISTERS: &[&str] = &[
     "rdi", "rsi", "rdx", "rcx"
 ];
