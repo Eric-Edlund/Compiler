@@ -67,6 +67,7 @@ fn allocate_registers_function(
             .collect::<Vec<_>>();
         extend_interference_graph(&mut interference_graph, &live_sets);
     }
+    // complete_interference_graph(&mut interference_graph);
 
     let coloring = disjoint_coloring(&interference_graph);
     assert_eq!(coloring.len(), interference_graph.num_nodes());
@@ -217,6 +218,19 @@ impl InterferenceGraph {
 
     pub fn neighbors(&self, n: &String) -> HashSet<&String> {
         return self.adj_list.get(n).unwrap().iter().collect();
+    }
+}
+
+fn complete_interference_graph(graph: &mut InterferenceGraph)
+{
+    let nodes: Vec<String> = graph.nodes().iter().map(|r| r.to_string()).collect();
+    for node in &nodes {
+        for node1 in &nodes {
+            if node == node1 {
+                continue
+            }
+            graph.add(node, node1)
+        }
     }
 }
 
