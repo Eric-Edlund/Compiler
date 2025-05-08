@@ -1,4 +1,4 @@
-Very Cool Compiler
+# Very Cool Compiler
 
 Bizzare Unsolved Problems:
 
@@ -26,11 +26,21 @@ Extra Stuff that works:
 - Rust
 - Option to compile without using registers
 
-f at most 1 page, describing the approach you took in your implementation,
-and features you planned but did not
 
 ```bash
+# With this command, the tests give up after the first file fails to compile/run
+# with correct output. The generated assembly is in out.s
 cargo test
 
-cargo run -- tests/assignments/a7/test5.l -d -o out.s --no-registers && gcc out.s runtime.o -o a.out -g && ./a.out
+# These build the test file and run it on the host machine,
+# comparing the stdout to the expected value.
+cargo test --test assignment_4
+cargo test --test assignment_5
+cargo test --test assignment_6
+cargo test --test assignment_7
+
+# Invoke the compiler on a source file.
+cargo run -- tests/assignments/a7/test5.l -d -o out.s --no-registers &&
+  gcc out.s runtime.o -o a.out -g &&
+  ./a.out
 ```
